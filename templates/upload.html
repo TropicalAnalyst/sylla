@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Upload Sources from CSV</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-3">
+                            {{ form.file.label(class="form-label") }}
+                            {{ form.file(class="form-control") }}
+                            {% if form.file.errors %}
+                                {% for error in form.file.errors %}
+                                    <div class="text-danger">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                    
+                    <div class="mt-4">
+                        <h5>CSV Format Requirements:</h5>
+                        <p>The CSV file should have the following columns:</p>
+                        <ul>
+                            <li><code>title</code> - Source title (required)</li>
+                            <li><code>content</code> - Source content</li>
+                            <li><code>category</code> - Source category</li>
+                            <li><code>keep</code> - Set to "true" to keep the source (optional)</li>
+                            <li><code>ip</code> - IP address (optional)</li>
+                            <li><code>ip_description</code> - Description for IP (optional)</li>
+                            <li><code>url</code> - URL (optional)</li>
+                            <li><code>url_description</code> - Description for URL (optional)</li>
+                            <li><code>hash_value</code> - Hash value (optional)</li>
+                            <li><code>hash_type</code> - Hash type (md5, sha1, sha256, etc.) (optional)</li>
+                            <li><code>hash_description</code> - Description for hash (optional)</li>
+                        </ul>
+                        
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading">Example CSV Format:</h6>
+                            <pre class="mb-0">title,content,category,keep,ip,ip_description,url,url_description,hash_value,hash_type,hash_description
+"Malicious IP","Found in spam logs","Threat Intel",true,"192.168.1.1","Spam source","http://example.com","Malicious domain","d41d8cd98f00b204e9800998ecf8427e","md5","Malicious file hash"</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

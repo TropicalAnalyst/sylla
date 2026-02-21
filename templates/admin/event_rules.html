@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Manage Event Rules</h1>
+                <div>
+                    <a href="{{ url_for('create_event_rule') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-plus me-2"></i>New Rule
+                    </a>
+                    <a href="{{ url_for('admin') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Admin
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-cog me-2"></i>Event Rules
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if rules %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rule in rules %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ rule.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ rule.rule_type.replace('_', ' ').title() }}</span>
+                                    </td>
+                                    <td>{{ rule.description or 'No description' }}</td>
+                                    <td>
+                                        {% if rule.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ format_dt(rule.created_at, include_time=False) }}</td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('edit_event_rule', rule_id=rule.id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <form method="POST" action="{{ url_for('delete_event_rule', rule_id=rule.id) }}" 
+                                                  class="d-inline" onsubmit="return confirm('Are you sure you want to delete this rule?');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No event rules found. <a href="{{ url_for('create_event_rule') }}">Create your first rule</a>.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

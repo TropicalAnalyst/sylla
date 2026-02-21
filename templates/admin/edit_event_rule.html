@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Edit Event Rule</h1>
+                <a href="{{ url_for('event_rules') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Rules
+                </a>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-edit me-2"></i>Rule Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="needs-validation" novalidate>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">Rule Name *</label>
+                                    <input type="text" class="form-control" id="name" name="name" 
+                                           value="{{ rule.name }}" required>
+                                    <div class="form-text">A descriptive name for this rule</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rule_type" class="form-label">Rule Type</label>
+                                    <input type="text" class="form-control" id="rule_type" name="rule_type" 
+                                           value="{{ rule.rule_type.replace('_', ' ').title() }}" readonly>
+                                    <div class="form-text">Rule type cannot be changed after creation</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" 
+                                      placeholder="Brief description of what this rule does...">{{ rule.description or '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                       {% if rule.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="is_active">
+                                    Active
+                                </label>
+                                <div class="form-text">Inactive rules won't generate events</div>
+                            </div>
+                        </div>
+                        
+                        <!-- IOC Frequency Fields -->
+                        {% if rule.rule_type == 'ioc_frequency' %}
+                        <div id="ioc_frequency_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">IOC Frequency Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="ioc_type" class="form-label">IOC Type</label>
+                                                <select class="form-select" id="ioc_type" name="ioc_type" required>
+                                                    <option value="">Select IOC type...</option>
+                                                    <option value="ip" {% if conditions.ioc_type == 'ip' %}selected{% endif %}>IP Address</option>
+                                                    <option value="domain" {% if conditions.ioc_type == 'domain' %}selected{% endif %}>Domain</option>
+                                                    <option value="url" {% if conditions.ioc_type == 'url' %}selected{% endif %}>URL</option>
+                                                    <option value="hash" {% if conditions.ioc_type == 'hash' %}selected{% endif %}>Hash</option>
+                                                    <option value="email address" {% if conditions.ioc_type == 'email address' %}selected{% endif %}>Email Address</option>
+                                                    <option value="username" {% if conditions.ioc_type == 'username' %}selected{% endif %}>Username</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="min_count" class="form-label">Minimum Count</label>
+                                                <input type="number" class="form-control" id="min_count" name="min_count" 
+                                                          min="1" value="{{ conditions.min_count or 2 }}" required>
+                                                <div class="form-text">Minimum number of occurrences to trigger</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="time_window_hours" class="form-label">Time Window (hours)</label>
+                                                <input type="number" class="form-control" id="time_window_hours" name="time_window_hours" 
+                                                          min="1" value="{{ conditions.time_window_hours or 24 }}" required>
+                                                <div class="form-text">Time window to check for occurrences</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- About to Expire Fields -->
+                        {% if rule.rule_type == 'about_to_expire' %}
+                        <div id="about_to_expire_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">About to Expire Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="days_before_expiry" class="form-label">Days Before Expiry</label>
+                                        <input type="number" class="form-control" id="days_before_expiry" name="days_before_expiry" min="1" value="{{ conditions.days_before_expiry or 7 }}" required>
+                                        <div class="form-text">Trigger when notes are within this many days of expiry.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- IOC Monitor Fields -->
+                        {% if rule.rule_type == 'ioc_monitor' %}
+                        <div id="ioc_monitor_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">IOC Monitor Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="ioc_type" class="form-label">IOC Type</label>
+                                                <select class="form-select" id="ioc_type" name="ioc_type" required>
+                                                    <option value="">Select IOC type...</option>
+                                                    <option value="ip" {% if conditions.ioc_type == 'ip' %}selected{% endif %}>IP Address</option>
+                                                    <option value="domain" {% if conditions.ioc_type == 'domain' %}selected{% endif %}>Domain</option>
+                                                    <option value="url" {% if conditions.ioc_type == 'url' %}selected{% endif %}>URL</option>
+                                                    <option value="hash" {% if conditions.ioc_type == 'hash' %}selected{% endif %}>Hash</option>
+                                                    <option value="email address" {% if conditions.ioc_type == 'email address' %}selected{% endif %}>Email Address</option>
+                                                    <option value="username" {% if conditions.ioc_type == 'username' %}selected{% endif %}>Username</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="ioc_value" class="form-label">IOC Value</label>
+                                                <input type="text" class="form-control" id="ioc_value" name="ioc_value" value="{{ conditions.ioc_value or '' }}" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Incident Monitor Fields -->
+                        {% if rule.rule_type == 'incident_monitor' %}
+                        <div id="incident_monitor_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Incident Monitor Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="incident_id" class="form-label">Incident ID</label>
+                                        <input type="number" class="form-control" id="incident_id" name="incident_id" value="{{ conditions.incident_id or '' }}" required>
+                                        <div class="form-text">Triggers when new sources relate to IOCs from this incident.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- User Activity Fields -->
+                        {% if rule.rule_type == 'user_activity' %}
+                        <div id="user_activity_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">User Activity Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="min_notes" class="form-label">Minimum Notes</label>
+                                                <input type="number" class="form-control" id="min_notes" name="min_notes" 
+                                                       min="1" value="{{ conditions.min_notes or 5 }}">
+                                                <div class="form-text">Minimum number of notes created by a user</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="time_window_hours" class="form-label">Time Window (hours)</label>
+                                                <input type="number" class="form-control" id="time_window_hours" name="time_window_hours" 
+                                                       min="1" value="{{ conditions.time_window_hours or 24 }}">
+                                                <div class="form-text">Time window to check for user activity</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Category Pattern Fields -->
+                        {% if rule.rule_type == 'category_pattern' %}
+                        <div id="category_pattern_fields">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Category Pattern Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="category" class="form-label">Category</label>
+                                                <input type="text" class="form-control" id="category" name="category" 
+                                                       value="{{ conditions.category or '' }}" placeholder="e.g., Malware">
+                                                <div class="form-text">Category to monitor</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="min_count" class="form-label">Minimum Count</label>
+                                                <input type="number" class="form-control" id="min_count" name="min_count" 
+                                                       min="1" value="{{ conditions.min_count or 2 }}">
+                                                <div class="form-text">Minimum number of notes in this category</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="time_window_hours" class="form-label">Time Window (hours)</label>
+                                                <input type="number" class="form-control" id="time_window_hours" name="time_window_hours" 
+                                                       min="1" value="{{ conditions.time_window_hours or 24 }}">
+                                                <div class="form-text">Time window to check for category activity</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Update Rule
+                            </button>
+                            <a href="{{ url_for('event_rules') }}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form validation
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %} 

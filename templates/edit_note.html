@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Edit Source</h1>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                <div class="row">
+                    <!-- Left Column: Main Details -->
+                    <div class="col-lg-8">
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="title" name="title" value="{{ note.title }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="category" class="form-label">Category</label>
+                            <select class="form-select" id="category" name="category" required>
+                                <option value="" disabled>Select a category...</option>
+                                {% for category in categories %}
+                                <option value="{{ category.name }}" {% if note.category == category.name %}selected{% endif %}>{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="content" class="form-label">Content</label>
+                            <textarea class="form-control" id="content" name="content" rows="10" required>{{ note.content }}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Metadata & Options -->
+                    <div class="col-lg-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Options</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="keep" name="keep" {% if note.keep %}checked{% endif %}>
+                                    <label class="form-check-label" for="keep">Keep this source</label>
+                                    <div class="form-text">Prevents the source from being automatically deleted by retention policies.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IOCs Section -->
+                <div class="mt-4">
+                    <h5 class="mb-3">Indicators of Compromise (IOCs)</h5>
+                    <div id="ioc-list"></div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addIOCRow()">
+                        <i class="fas fa-plus me-1"></i>Add IOC
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#batchAddModal">
+                        <i class="fas fa-file-import me-1"></i>Batch Add
+                    </button>
+                </div>
+
+                <!-- Form Actions -->
+                <hr class="mt-4">
+                <div class="d-flex justify-content-end">
+                    <a href="{{ url_for('view_note', note_id=note.id) }}" class="btn btn-secondary me-2">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Add Modal -->
+<div class="modal fade" id="batchAddModal" tabindex="-1" aria-labelledby="batchAddModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="batchAddModalLabel">Batch Add IOCs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="batch-ioc-type" class="form-label">IOC Type</label>
+                    <select class="form-select" id="batch-ioc-type">
+                        <option value="ip">ip</option>
+                        <option value="domain">domain</option>
+                        <option value="url">url</option>
+                        <option value="hash">hash</option>
+                        <option value="email address">email address</option>
+                        <option value="username">username</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="batch-ioc-values" class="form-label">IOC Values (one per line)</label>
+                    <textarea class="form-control" id="batch-ioc-values" rows="10"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="batch-ioc-tags" class="form-label">Tags (optional, comma-separated)</label>
+                    <input type="text" class="form-control" id="batch-ioc-tags" placeholder="e.g., malware,phishing">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="handleBatchAdd()">Add IOCs</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function handleBatchAdd() {
+    const type = document.getElementById('batch-ioc-type').value;
+    const values = document.getElementById('batch-ioc-values').value.split('\n');
+    const tags = document.getElementById('batch-ioc-tags').value;
+    
+    values.forEach(value => {
+        value = value.trim();
+        if (value) {
+            addIOCRow({ type, value, tags });
+        }
+    });
+    
+    // Hide the modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('batchAddModal'));
+    modal.hide();
+
+    // Clear the form for next time
+    document.getElementById('batch-ioc-values').value = '';
+    document.getElementById('batch-ioc-tags').value = '';
+}
+
+function addIOCRow(values={}) {
+    const iocList = document.getElementById('ioc-list');
+    const div = document.createElement('div');
+    div.className = 'card mb-3';
+    div.innerHTML = `
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Type</label>
+                    <select class="form-select form-select-sm" name="types[]" required>
+                        <option value="">Select...</option>
+                        <option value="ip" ${values.type==='ip'?"selected":""}>ip</option>
+                        <option value="domain" ${values.type==='domain'?"selected":""}>domain</option>
+                        <option value="url" ${values.type==='url'?"selected":""}>url</option>
+                        <option value="hash" ${values.type==='hash'?"selected":""}>hash</option>
+                        <option value="email address" ${values.type==='email address'?"selected":""}>email address</option>
+                        <option value="username" ${values.type==='username'?"selected":""}>username</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Value</label>
+                    <input type="text" class="form-control form-control-sm" name="values[]" placeholder="IOC Value" value="${values.value||''}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Tags</label>
+                    <input type="text" class="form-control form-control-sm" name="tags[]" placeholder="e.g., malware,phishing" value="${values.tags||''}">
+                </div>
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.card').remove()">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    iocList.appendChild(div);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const iocList = document.getElementById('ioc-list');
+    // Clear any potential placeholders
+    iocList.innerHTML = '';
+
+    const existingIOCs = JSON.parse('{{ ioc_json | safe }}');
+
+    if (existingIOCs.length > 0) {
+        existingIOCs.forEach(function(ioc) {
+            addIOCRow(ioc);
+        });
+    } else {
+        // If it's a new note (or an old one with no IOCs), add one empty row.
+        addIOCRow();
+    }
+});
+</script>
+{% endblock %} 

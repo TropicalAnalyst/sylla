@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Note: {{ note.title }}{% endblock %}
+{% block head %}
+<style>
+  .link-symbol { display: inline-block; margin-left: 0.5rem; font-size: 0.8rem; color: #007bff; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Note: {{ note.title }}</h1>
+<div class="card mb-3">
+  <div class="card-body">
+    <p><strong>Content:</strong> {{ note.content }}</p>
+    <p><strong>Created:</strong> {{ format_dt(note.created_at, include_time=False) }}</p>
+    <p><strong>Updated:</strong> {{ format_dt(note.updated_at, include_time=False) }}</p>
+    <p><strong>IOCs (IPs):</strong> {{ note.related_ips|map(attribute='ip')|join(', ') }}</p>
+    <p><strong>IOCs (URLs):</strong> {{ note.related_urls|map(attribute='url')|join(', ') }}</p>
+    <p><strong>IOCs (Hashes):</strong> {{ note.related_hashes|map(attribute='hash_value')|join(', ') }}</p>
+  </div>
+</div>
+<div class="d-flex justify-content-between">
+  <a href="{{ url_for('welcome') }}" class="btn btn-secondary">Back</a>
+  <a href="{{ url_for('edit_note', note_id=note.id) }}" class="btn btn-primary">Edit</a>
+  <button id="relations-btn" class="btn btn-info" data-toggle="modal" data-target="#relationsModal">Relations <span id="relations-count" class="badge badge-light"></span></button>
+</div>
+
+<!-- Bootstrap Modal for Relations -->
+<div class="modal fade" id="relationsModal" tabindex="-1" role="dialog" aria-labelledby="relationsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="relationsModalLabel">Relations ({{ note.title }})</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="relations-loading" style="display: none;">Loading relations…</div>
+        <div id="relations-empty" style="display: none;">No relations found.</div>
+        <div id="relations-list" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const relationsBtn = document.getElementById("relations-btn");
+  const relationsList = document.getElementById("relations-list");
+  const relationsLoading = document.getElementById("relations-loading");
+  const relationsEmpty = document.getElementById("relations-empty");
+  const relationsCount = document.getElementById("relations-count");
+  let relations = {};
+  let totalRelated = 0;
+  function renderRelations() {
+    const iocs = Object.keys(relations);
+    totalRelated = 0;
+    if (iocs.length === 0) {
+      relationsList.style.display = "none";
+      relationsEmpty.style.display = "block";
+      relationsCount.textContent = "0";
+      return;
+    }
+    let html = "";
+    iocs.forEach(ioc => {
+      html += `<div><strong>IOC:</strong> <span class='text-monospace'>${ioc}</span><ul class='list-group mb-2'>`;
+      relations[ioc].forEach(r => {
+        html += `<li class='list-group-item'><a href='/note/${r.id}'>${r.title}</a> <span class='link-symbol'>&#x1F517;</span> (Created: ${r.created_at})</li>`;
+        totalRelated++;
+      });
+      html += "</ul></div>";
+    });
+    relationsList.innerHTML = html;
+    relationsList.style.display = "block";
+    relationsEmpty.style.display = "none";
+    relationsCount.textContent = totalRelated;
+  }
+  relationsBtn.addEventListener("click", function (e) {
+    relationsLoading.style.display = "block";
+    fetch("/note/{{ note.id }}/relations")
+      .then(response => response.json())
+      .then(data => { relations = data; relationsLoading.style.display = "none"; renderRelations(); })
+      .catch(err => { console.error("Error fetching relations:", err); relationsLoading.style.display = "none"; relationsEmpty.style.display = "block"; });
+  });
+})();
+</script>
+{% endblock %} 

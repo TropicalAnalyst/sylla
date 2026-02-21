@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-2 text-gray-800">IOCs for Source: {{ note.title }}</h1>
+    <p class="mb-4">
+        <a href="{{ url_for('view_note', note_id=note.id) }}">&larr; Back to source</a>
+    </p>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Indicators of Compromise ({{ iocs.total }})</h5>
+        </div>
+        <div class="card-body">
+            {% if iocs.items %}
+                <div class="d-flex flex-wrap gap-3">
+                    {% for ioc in iocs.items %}
+                        <div class="card" style="width: 22rem;">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">{{ ioc.type.upper() }}</h6>
+                                <p class="card-text text-break"><code>{{ ioc.value }}</code></p>
+                                {% if ioc.tags %}
+                                    <div class="mt-2">
+                                    {% for tag in ioc.tags.split(',') %}
+                                        <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
+                                    {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <a href="{{ url_for('search', ioc_type=ioc.type, ioc_value=ioc.value) }}" class="stretched-link"></a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted">No IOCs found for this source.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if iocs.pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            <li class="page-item {% if not iocs.has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('note_iocs', note_id=note.id, page=iocs.prev_num) }}">Previous</a>
+            </li>
+            {% for page_num in iocs.iter_pages() %}
+                {% if page_num %}
+                    <li class="page-item {% if page_num == iocs.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('note_iocs', note_id=note.id, page=page_num) }}">{{ page_num }}</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+            <li class="page-item {% if not iocs.has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('note_iocs', note_id=note.id, page=iocs.next_num) }}">Next</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+
+</div>
+{% endblock %} 

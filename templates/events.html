@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Events</h1>
+        <div>
+            {% if current_user.has_permission('can_manage_users') %}
+            <a href="{{ url_for('event_rules') }}" class="btn btn-sm btn-outline-primary shadow-sm"><i class="fas fa-cog fa-sm"></i> Manage Rules</a>
+            <a href="{{ url_for('run_event_rules') }}" class="btn btn-sm btn-outline-success shadow-sm"><i class="fas fa-play fa-sm"></i> Run Rules Now</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Event Stats -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">New</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ new_events_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bell fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Acknowledged</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ acknowledged_events_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Resolved</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ resolved_events_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-flag-checkered fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Total</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ events.total }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-list-ol fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Events List -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-exclamation-triangle me-2"></i>Events List</h6>
+            <form method="get" class="d-inline-block">
+                <div class="input-group input-group-sm">
+                    <label for="status" class="input-group-text">Status:</label>
+                    <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+                        <option value="new" {% if status_filter == 'new' %}selected{% endif %}>New</option>
+                        <option value="acknowledged" {% if status_filter == 'acknowledged' %}selected{% endif %}>Acknowledged</option>
+                        <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+        <div class="card-body">
+            {% if events.items %}
+                <div class="mb-3 d-flex gap-2" id="bulkActionsContainer" style="display: none;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllEventsBtn">
+                        <i class="fas fa-check-square me-1"></i>Select All
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="bulkResolveBtn" disabled>
+                        <i class="fas fa-flag-checkered me-1"></i>Bulk Resolve (<span id="selectedCount">0</span>)
+                    </button>
+                    <span class="text-muted small align-self-center ms-2">selected</span>
+                </div>
+
+                <div class="list-group">
+                    {% for event in events.items %}
+                        <div class="list-group-item list-group-item-action mb-3 border rounded event-item" data-event-id="{{ event.id }}">
+                            <div class="d-flex w-100 justify-content-between align-items-start">
+                                <div class="form-check me-3 align-self-center" style="display: none;">
+                                    <input class="form-check-input event-checkbox" type="checkbox" value="{{ event.id }}" id="event-{{ event.id }}">
+                                </div>
+                                <div class="w-100">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">
+                                            <a href="{{ url_for('view_event', event_id=event.id) }}" class="text-decoration-none">{{ event.title }}</a>
+                                        </h5>
+                                        <small>{{ format_dt(event.created_at) }}</small>
+                                    </div>
+                                    <p class="mb-1">{{ event.description | truncate(200) }}</p>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div>
+                                            <span class="badge 
+                                                {% if event.status == 'new' %}bg-primary
+                                                {% elif event.status == 'acknowledged' %}bg-warning text-dark
+                                                {% elif event.status == 'resolved' %}bg-success
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ event.status.title() }}
+                                            </span>
+                                            <span class="badge bg-info text-dark">{{ event.event_type.replace('_', ' ').title() }}</span>
+                                            {% if event.related_notes %}
+                                            <small class="ms-2">
+                                                Related Notes:
+                                                {% for note_id in event.related_notes.split(',')|map('int') %}
+                                                    <a href="{{ url_for('view_note', note_id=note_id) }}">#{{ note_id }}</a>
+                                                {% endfor %}
+                                            </small>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="{{ url_for('view_event', event_id=event.id) }}" class="btn btn-outline-primary"><i class="fas fa-eye"></i></a>
+                                                {% if current_user.has_permission('can_edit') %}
+                                                    {% if event.status == 'new' %}
+                                                    <form method="POST" action="{{ url_for('acknowledge_event', event_id=event.id) }}" class="d-inline">
+                                                        <button type="submit" class="btn btn-outline-warning" title="Acknowledge"><i class="fas fa-check"></i></button>
+                                                    </form>
+                                                    {% endif %}
+                                                    {% if event.status in ['new', 'acknowledged'] %}
+                                                    <form method="POST" action="{{ url_for('resolve_event', event_id=event.id) }}" class="d-inline">
+                                                        <button type="submit" class="btn btn-outline-success" title="Resolve"><i class="fas fa-flag-checkered"></i></button>
+                                                    </form>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Pagination -->
+                {% if events.pages > 1 %}
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item {% if not events.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('events', page=events.prev_num, status=status_filter) }}">Previous</a>
+                        </li>
+                        {% for page_num in events.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == events.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('events', page=page_num, status=status_filter) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {% if not events.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('events', page=events.next_num, status=status_filter) }}">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+            {% else %}
+                <div class="alert alert-info">No events found with the current filter.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedEventIds = new Set();
+
+// Show/hide checkboxes on hover or selection
+document.querySelectorAll('.event-item').forEach(item => {
+    const checkbox = item.querySelector('.form-check');
+    const input = item.querySelector('.event-checkbox');
+    
+    item.addEventListener('mouseenter', () => {
+        if (checkbox) checkbox.style.display = 'flex';
+    });
+    
+    item.addEventListener('mouseleave', () => {
+        if (checkbox && selectedEventIds.size === 0) {
+            checkbox.style.display = 'none';
+        }
+    });
+    
+    if (input) {
+        input.addEventListener('change', (e) => {
+            const eventId = parseInt(e.target.value);
+            if (e.target.checked) {
+                selectedEventIds.add(eventId);
+                item.classList.add('bg-light');
+            } else {
+                selectedEventIds.delete(eventId);
+                item.classList.remove('bg-light');
+            }
+            updateEventSelection();
+        });
+    }
+});
+
+function updateEventSelection() {
+    const container = document.getElementById('bulkActionsContainer');
+    const countSpan = document.getElementById('selectedCount');
+    const bulkResolveBtn = document.getElementById('bulkResolveBtn');
+    
+    countSpan.textContent = selectedEventIds.size;
+    
+    if (selectedEventIds.size > 0) {
+        container.style.display = 'flex';
+        bulkResolveBtn.disabled = false;
+    } else {
+        container.style.display = 'none';
+        bulkResolveBtn.disabled = true;
+    }
+    
+    // Update select all button
+    const checkboxes = document.querySelectorAll('.event-checkbox');
+    const allSelected = selectedEventIds.size === checkboxes.length && checkboxes.length > 0;
+    const selectAllBtn = document.getElementById('selectAllEventsBtn');
+    
+    if (allSelected) {
+        selectAllBtn.classList.remove('btn-outline-secondary');
+        selectAllBtn.classList.add('btn-secondary');
+        selectAllBtn.innerHTML = '<i class="fas fa-times-square me-1"></i>Deselect All';
+    } else {
+        selectAllBtn.classList.remove('btn-secondary');
+        selectAllBtn.classList.add('btn-outline-secondary');
+        selectAllBtn.innerHTML = '<i class="fas fa-check-square me-1"></i>Select All';
+    }
+}
+
+// Select All button
+document.getElementById('selectAllEventsBtn').addEventListener('click', () => {
+    const checkboxes = document.querySelectorAll('.event-checkbox');
+    const allSelected = selectedEventIds.size === checkboxes.length && checkboxes.length > 0;
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allSelected;
+        cb.dispatchEvent(new Event('change'));
+    });
+});
+
+// Bulk Resolve button
+document.getElementById('bulkResolveBtn').addEventListener('click', async () => {
+    if (selectedEventIds.size === 0) return;
+    
+    const btn = document.getElementById('bulkResolveBtn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Resolving...';
+    
+    try {
+        const promises = Array.from(selectedEventIds).map(eventId =>
+            fetch(`/api/events/${eventId}/resolve`, { method: 'POST' })
+        );
+        
+        await Promise.all(promises);
+        
+        // Reload page to reflect changes
+        location.reload();
+    } catch (error) {
+        console.error('Error resolving events:', error);
+        alert('Error resolving events');
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+});
+</script>
+{% endblock %} 

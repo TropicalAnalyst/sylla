@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Page Heading -->
+    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Admin Control Panel</h1>
+    </div>
+
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-12 col-xl-8">
+            <!-- User Management -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3 d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary mb-2 mb-sm-0"><i class="fas fa-users me-2"></i>User Management</h6>
+                    <a href="{{ url_for('create_user') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-user-plus fa-sm"></i> <span class="d-none d-sm-inline">New User</span>
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                <tr>
+                                    <td class="align-middle">{{ user.username }}</td>
+                                    <td class="align-middle">
+                                        {% if user.role.name == 'Admin' %}
+                                            <span class="badge bg-success">{{ user.role.name }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ user.role.name }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-edit"></i> <span class="d-none d-sm-inline">Edit</span>
+                                            </a>
+                                            {% if user.username != current_user.username and user.username != 'sylla' %}
+                                            <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Database Management -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-database me-2"></i>Database Management</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <div class="d-flex flex-column h-100">
+                                <h6>Import Sources</h6>
+                                <p class="text-muted small">Upload a CSV file to import multiple sources at once.</p>
+                                <a href="{{ url_for('upload_csv') }}" class="btn btn-primary mt-auto">
+                                    <i class="fas fa-file-upload me-2"></i>Upload CSV
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="d-flex flex-column h-100">
+                                <h6>Clear Database</h6>
+                                <p class="text-muted small">This will delete all data except the admin account.</p>
+                                <button class="btn btn-danger mt-auto" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal">
+                                    <i class="fas fa-trash me-2"></i>Clear Database
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-12 col-xl-4">
+            <!-- Quick Actions -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{{ url_for('manage_categories') }}" class="list-group-item list-group-item-action d-flex align-items-center">
+                        <i class="fas fa-tags me-2"></i>Manage Categories
+                    </a>
+                    <a href="{{ url_for('event_rules') }}" class="list-group-item list-group-item-action d-flex align-items-center">
+                        <i class="fas fa-cog me-2"></i>Manage Event Rules
+                    </a>
+                    <a href="{{ url_for('view_logs') }}" class="list-group-item list-group-item-action d-flex align-items-center">
+                        <i class="fas fa-list me-2"></i>View User Logs
+                    </a>
+                    <a href="{{ url_for('run_event_rules') }}" class="list-group-item list-group-item-action text-success d-flex align-items-center">
+                        <i class="fas fa-play me-2"></i>Run Event Rules Manually
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Global Retention Period -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                     <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-clock me-2"></i>Global Retention Period [Beta]</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_settings') }}">
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="retention_days" name="retention_days" min="30" max="180" value="{{ retention_days }}" required>
+                            <button type="submit" class="btn btn-primary">Update</button>
+                        </div>
+                        <div class="form-text mt-2">Default retention for sources (in days). Min: 30, Max: 180.</div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Export Data -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-download me-2"></i>Export Data</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('export_logs') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-file-alt me-2"></i>Export Logs
+                        </a>
+                        <a href="{{ url_for('export_sources') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-database me-2"></i>Export Sources
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Type <strong>Confirm</strong> to delete the entire database. This action cannot be undone.</p>
+        <input type="text" id="confirmInput" class="form-control" oninput="checkConfirmInput()">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="POST" action="{{ url_for('clear_database') }}" id="deleteForm">
+          <button id="deleteBtn" type="submit" class="btn btn-danger" disabled>Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function checkConfirmInput() {
+  document.getElementById('deleteBtn').disabled = document.getElementById('confirmInput').value !== 'Confirm';
+}
+</script>
+{% endblock %} 

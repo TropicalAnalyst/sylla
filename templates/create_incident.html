@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .hero-card {
+        background: linear-gradient(135deg, #1f3c88 0%, #3f78e0 100%);
+        color: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+    }
+    .pill-select .btn {
+        border-radius: 999px;
+        transition: all 0.15s ease;
+    }
+    .pill-select .btn.active {
+        box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+    }
+    .meta-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 20px;
+        background: #f5f7fb;
+        color: #5b6b7b;
+        font-size: 0.85rem;
+    }
+</style>
+
+<div class="container my-4">
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="hero-card h-100">
+                <div class="d-flex align-items-start">
+                    <div class="me-3">
+                        <div class="bg-white text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="mb-1">Create a new incident</h4>
+                        <p class="mb-0 opacity-75">Capture the key details, pick a severity, and start logging IOCs in seconds.</p>
+                    </div>
+                </div>
+                <hr class="border-light border-opacity-50 my-3">
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="meta-badge"><i class="fas fa-users"></i>Auto-add yourself as participant</span>
+                    <span class="meta-badge"><i class="fas fa-clock"></i>Real-time updates</span>
+                    <span class="meta-badge"><i class="fas fa-shield-alt"></i>Preserve evidence</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-1">Incident details</h5>
+                            <small class="text-muted">Provide a concise title and context to help responders act fast.</small>
+                        </div>
+                        <span class="badge bg-primary-subtle text-primary"><i class="fas fa-bolt me-1"></i>Fast track</span>
+                    </div>
+
+                    <form method="POST" class="needs-validation" novalidate>
+                        <div class="mb-4">
+                            <label for="title" class="form-label">Incident title <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-lg" id="title" name="title" 
+                                   placeholder="e.g., Phishing campaign targeting finance department" required>
+                            <div class="invalid-feedback">A title is required.</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" 
+                                      placeholder="Add observed behavior, scope, or initial findings..."></textarea>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="category" class="form-label">Category</label>
+                                <select class="form-select" id="category" name="category">
+                                    <option value="">Select category</option>
+                                    <option value="Malware">Malware</option>
+                                    <option value="Phishing">Phishing</option>
+                                    <option value="Data Breach">Data Breach</option>
+                                    <option value="Lateral Movement">Lateral Movement</option>
+                                    <option value="Command & Control">Command & Control</option>
+                                    <option value="Compromised Credentials">Compromised Credentials</option>
+                                    <option value="Infrastructure">Infrastructure</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Severity <span class="text-danger">*</span></label>
+                                <div class="btn-group pill-select w-100" role="group" aria-label="Severity selector">
+                                    <input type="hidden" name="severity" id="severity" value="medium">
+                                    <button type="button" class="btn btn-outline-success" data-value="low">Low</button>
+                                    <button type="button" class="btn btn-outline-primary active" data-value="medium">Medium</button>
+                                    <button type="button" class="btn btn-outline-warning" data-value="high">High</button>
+                                    <button type="button" class="btn btn-outline-danger" data-value="critical">Critical</button>
+                                </div>
+                                <div class="form-text">Pick the highest observed impact so far.</div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-play me-2"></i>Start Incident Response
+                            </button>
+                            <a href="{{ url_for('incidents_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Form validation
+    (function() {
+        'use strict';
+        window.addEventListener('load', function() {
+            var forms = document.querySelectorAll('.needs-validation');
+            Array.prototype.slice.call(forms).forEach(function(form) {
+                form.addEventListener('submit', function(event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        }, false);
+    })();
+
+    // Severity pills
+    document.querySelectorAll('.pill-select .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.pill-select .btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('severity').value = btn.dataset.value;
+        });
+    });
+</script>
+{% endblock %}

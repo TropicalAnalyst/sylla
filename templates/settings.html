@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Account Settings</h2>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+            {{ form.old_password.label }}
+            {{ form.old_password(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.new_password.label }}
+            {{ form.new_password(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.confirm_password.label }}
+            {{ form.confirm_password(class="form-control") }}
+        </div>
+        <br />
+        <button type="submit" class="btn btn-primary">Change Password</button>
+    </form>
+    <hr>
+</div>
+{% endblock %} 

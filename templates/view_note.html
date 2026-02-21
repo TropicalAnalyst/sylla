@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="mb-0">{{ note.title[:50] + '...' if note.title|length > 50 else note.title }}</h1>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Notes
+                    </a>
+                    {% if current_user.has_permission('can_delete') or current_user.id == note.user_id %}
+                    <form method="POST" action="{{ url_for('delete_note', note_id=note.id) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this source?')">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash me-2"></i>Delete
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="noteTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab" color="black" aria-controls="details" aria-selected="true">
+                                <i class="fas fa-info-circle me-2"></i>Details
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="iocs-tab" data-bs-toggle="tab" data-bs-target="#iocs" type="button" role="tab" aria-controls="iocs" aria-selected="false">
+                                <i class="fas fa-shield-alt me-2"></i>IOCs
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="relationships-tab" data-bs-toggle="tab" data-bs-target="#relationships" type="button" role="tab" aria-controls="relationships" aria-selected="false">
+                                <i class="fas fa-project-diagram me-2"></i>Relationships
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="noteTabsContent">
+                        <!-- Details Tab -->
+                        <div class="tab-pane fade show active" id="details" role="tabpanel" aria-labelledby="details-tab">
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-2">
+                                    <span class="fw-semibold">Category:</span> <span class="badge bg-secondary">{{ note.category }}</span>
+                                </div>
+                                <div class="col-md-6 mb-2 text-md-end">
+                                    <span class="fw-semibold">Last updated:</span> {{ format_dt(note.updated_at, include_seconds=True) }}
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <span class="fw-semibold">Created by:</span> {{ note.user.username }}
+                                </div>
+                                <div class="col-md-6 mb-2 text-md-end">
+                                    <span class="fw-semibold">Expiry:</span> 
+                                    {% if expiry_display == 'Never (Retention Disabled)' %}
+                                        <span class="badge bg-success text-dark">Never (Retention Disabled)</span>
+                                    {% elif expiry_date %}
+                                        <span class="badge bg-info text-dark">{{ expiry_display }}</span>
+                                        <br><small class="text-muted">{{ format_dt(expiry_date, include_seconds=True) }}</small>
+                                    {% else %}
+                                        <span class="badge bg-success text-dark">{{ expiry_display }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <span class="fw-semibold">Created at:</span> {{ format_dt(note.created_at, include_seconds=True) }}
+                                </div>
+                            </div>
+                            <hr>
+                            <h6 class="text-muted mb-2">Content</h6>
+                            <div class="bg-light p-3 rounded border" style="min-height: 3rem;">
+                                <p id="note-content-p" class="mb-2" style="word-break: break-all; overflow-wrap: anywhere; white-space: pre-line;"
+                                   data-full-content='{{ note.content | tojson }}'
+                                   data-truncated-content='{{ note.truncated_content | tojson }}'>
+                                    {{ note.truncated_content }}
+                                </p>
+                                {% if note.content_overflows %}
+                                    <button id="view-more-btn" class="btn btn-link p-0">View More</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <!-- IOCs Tab -->
+                        <div class="tab-pane fade" id="iocs" role="tabpanel" aria-labelledby="iocs-tab">
+                            {% if iocs.items %}
+                            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3 gap-2">
+                                <div class="input-group" style="max-width: 420px;">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="search" class="form-control" id="ioc-search-input" placeholder="Search IOCs in this source">
+                                </div>
+                                <div class="text-muted small" id="ioc-count-summary">Showing {{ iocs.items|length }} of {{ iocs.items|length }} IOCs</div>
+                            </div>
+                            <div id="ioc-no-results" class="alert alert-info d-none">No IOCs match your search.</div>
+                            <div class="row g-3" id="ioc-list">
+                                {% for ioc in iocs.items %}
+                                    <div class="col-md-6 col-lg-4 ioc-card" data-ioc-value="{{ ioc.value|lower }}" data-ioc-type="{{ ioc.type|lower }}" data-ioc-tags="{{ ioc.tags|lower if ioc.tags else '' }}">
+                                        <div class="card mb-3 border-start border-4 border-primary">
+                                            <div class="card-body">
+                                                <div class="text-muted mb-1" style="font-size:0.9rem; font-weight:600;">{{ ioc.type.upper() }}</div>
+                                                <div class="ioc-value mb-2"><code>{{ ioc.value }}</code></div>
+                                                {% if ioc.tags %}
+                                                    <div class="mb-2">
+                                                        {% for tag in ioc.tags.split(',') %}
+                                                            <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                                <div class="col-12 text-center text-muted">No IOCs found for this source.</div>
+                            {% endif %}
+                            {% if iocs.pages > 1 %}
+                                <nav aria-label="IOC pagination">
+                                    <ul class="pagination mt-3 justify-content-center">
+                                        {% if iocs.has_prev %}
+                                            <li class="page-item"><a class="page-link" href="{{ url_for('view_note', note_id=note.id, page=iocs.prev_num) }}#iocs" onclick="setActiveTab('iocs')">Previous</a></li>
+                                        {% endif %}
+                                        {% for p in range(1, iocs.pages + 1) %}
+                                            <li class="page-item {% if p == iocs.page %}active{% endif %}"><a class="page-link" href="{{ url_for('view_note', note_id=note.id, page=p) }}#iocs" onclick="setActiveTab('iocs')">{{ p }}</a></li>
+                                        {% endfor %}
+                                        {% if iocs.has_next %}
+                                            <li class="page-item"><a class="page-link" href="{{ url_for('view_note', note_id=note.id, page=iocs.next_num) }}#iocs" onclick="setActiveTab('iocs')">Next</a></li>
+                                        {% endif %}
+                                    </ul>
+                                </nav>
+                            {% endif %}
+                        </div>
+                        <!-- Relationships Tab -->
+                        <div class="tab-pane fade" id="relationships" role="tabpanel" aria-labelledby="relationships-tab">
+                            <div id="relationships-content">
+                                <div class="text-center py-5">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading relationships...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle URL hash navigation
+    if (window.location.hash) {
+        const hash = window.location.hash.substring(1);
+        const tab = document.querySelector(`#${hash}-tab`);
+        if (tab) {
+            const tabInstance = new bootstrap.Tab(tab);
+            tabInstance.show();
+        }
+    }
+    
+    // View More/Less for content
+    const viewMoreBtn = document.getElementById('view-more-btn');
+    if (viewMoreBtn) {
+        const contentP = document.getElementById('note-content-p');
+        const fullContent = JSON.parse(contentP.getAttribute('data-full-content'));
+        const truncatedContent = JSON.parse(contentP.getAttribute('data-truncated-content'));
+        let expanded = false;
+        viewMoreBtn.addEventListener('click', function() {
+            if (!expanded) {
+                contentP.textContent = fullContent;
+                viewMoreBtn.innerText = 'View Less';
+                expanded = true;
+            } else {
+                contentP.textContent = truncatedContent;
+                viewMoreBtn.innerText = 'View More';
+                expanded = false;
+            }
+        });
+    }
+    // Relationships tab loader with caching
+    let relationshipsLoaded = false;
+    let relationshipsData = null;
+    const relationshipsTabBtn = document.querySelector('#relationships-tab');
+    if (relationshipsTabBtn) {
+        relationshipsTabBtn.addEventListener('click', function() {
+            if (!relationshipsLoaded) {
+                loadRelationships();
+            } else {
+                displayRelationships(relationshipsData);
+            }
+        });
+    }
+
+    const iocSearchInput = document.getElementById('ioc-search-input');
+    const iocCards = Array.from(document.querySelectorAll('.ioc-card'));
+    const iocSummary = document.getElementById('ioc-count-summary');
+    const noResults = document.getElementById('ioc-no-results');
+
+    if (iocSearchInput && iocCards.length) {
+        const total = iocCards.length;
+        const applyFilter = () => {
+            const term = iocSearchInput.value.trim().toLowerCase();
+            let visible = 0;
+            iocCards.forEach((card) => {
+                const haystack = `${card.dataset.iocValue} ${card.dataset.iocType} ${card.dataset.iocTags}`.trim();
+                const match = !term || haystack.includes(term);
+                card.classList.toggle('d-none', !match);
+                visible += match ? 1 : 0;
+            });
+            if (iocSummary) {
+                iocSummary.textContent = `Showing ${visible} of ${total} IOCs`;
+            }
+            if (noResults) {
+                noResults.classList.toggle('d-none', visible !== 0);
+            }
+        };
+        iocSearchInput.addEventListener('input', applyFilter);
+    }
+});
+
+function setActiveTab(tabName) {
+}
+
+function loadRelationships() {
+    const contentDiv = document.getElementById('relationships-content');
+    contentDiv.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading relationships...</p>
+        </div>
+    `;
+    fetch('/note/{{ note.id }}/relations')
+        .then(response => response.json())
+        .then(data => {
+            relationshipsData = data;
+            relationshipsLoaded = true;
+            displayRelationships(data);
+        })
+        .catch(error => {
+            contentDiv.innerHTML = '<p class="text-danger">Error loading relationships.</p>';
+        });
+}
+function displayRelationships(data) {
+    const contentDiv = document.getElementById('relationships-content');
+    if (Object.keys(data).length === 0) {
+        contentDiv.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-link fa-2x mb-2"></i><br>No related sources found.</div>';
+        return;
+    }
+    let html = '';
+    let totalRelationships = 0;
+    for (const [ioc, rel] of Object.entries(data)) {
+        html += `<div class="card mb-4 border-start border-4 border-primary"><div class="card-body"><div class="fw-semibold mb-2"><i class='fas fa-link me-2'></i> ${ioc}</div><div class="row g-2">`;
+        rel.notes.slice(0, 5).forEach(note => {
+            html += `<div class="col-md-6 col-lg-4"><div class="card mb-2"><div class="card-body"><div class="relationship-note-title fw-semibold mb-1">${note.title}</div><div class="relationship-note-meta mb-2">Category: <span class='badge bg-secondary'>${note.category}</span> | Created: <span>${note.created_at}</span></div><a href="/note/${note.id}" class="btn btn-primary btn-sm relationship-note-link">View</a></div></div></div>`;
+            totalRelationships++;
+        });
+        html += `</div>`;
+        if (rel.total_count > 5) {
+            html += `<div class='alert alert-info mt-2'>Showing 5 of ${rel.total_count} relationships. Use search for more.</div>`;
+        }
+        html += `</div></div>`;
+    }
+    const summaryHtml = `<div class="alert alert-info mb-3"><i class="fas fa-info-circle me-2"></i>Found ${totalRelationships} related sources across ${Object.keys(data).length} shared IOCs</div>`;
+    contentDiv.innerHTML = summaryHtml + html;
+}
+</script>
+{% endblock %} 

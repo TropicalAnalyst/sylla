@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Notes containing {{ ioc_type.upper() }}: {{ ioc_value }}</h1>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Sources
+                </a>
+            </div>
+            {% if notes.items %}
+            <div class="list-group">
+                {% for note in notes.items %}
+                <a href="{{ url_for('view_note', note_id=note.id) }}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1" title="{{ note.title }}">
+                            {{ note.title[:80] }}{% if note.title|length > 80 %}...{% endif %}
+                            {% if note.keep %}
+                            <span class="badge bg-primary">Kept</span>
+                            {% endif %}
+                        </h5>
+                        <small class="text-muted">{{ format_dt(note.created_at, include_time=False) }}</small>
+                    </div>
+                    <p class="mb-1">{{ note.content[:250] }}{% if note.content|length > 250 %}...{% endif %}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Category: {{ note.category }}</small>
+                        <small class="text-muted">By: {{ note.user.username }}</small>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            <!-- Pagination Controls -->
+            <nav aria-label="Notes pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if notes.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('search_by_ioc', ioc_type=ioc_type, ioc_value=ioc_value, page=notes.prev_num) }}">Previous</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Previous</span>
+                    </li>
+                    {% endif %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Page {{ notes.page }} of {{ notes.pages }}</span>
+                    </li>
+                    {% if notes.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('search_by_ioc', ioc_type=ioc_type, ioc_value=ioc_value, page=notes.next_num) }}">Next</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Next</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% else %}
+            <div class="alert alert-info">
+                No notes found containing this {{ ioc_type }}.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

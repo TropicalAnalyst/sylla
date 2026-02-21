@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Upload Sources from CSV</h1>
+        <a href="{{ url_for('admin') }}" class="btn btn-sm btn-secondary shadow-sm">
+            <i class="fas fa-arrow-left fa-sm text-white-50"></i> Back to Admin
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-5">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-file-upload me-2"></i>Upload File</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ form.file.label(class="form-label") }}
+                            {{ form.file(class="form-control") }}
+                            <div class="form-text">Please ensure your CSV file follows the format specified.</div>
+                        </div>
+                        <hr>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-info-circle me-2"></i>CSV Format Requirements</h6>
+                </div>
+                <div class="card-body">
+                    <p>The CSV file should have one row per IOC. Sources with the same title will be automatically grouped.</p>
+                    
+                    <h6><strong>Required Columns:</strong></h6>
+                    <ul>
+                        <li><code>title</code>: The title of the source.</li>
+                        <li><code>content</code>: The content/description for the source.</li>
+                        <li><code>ioc_type</code>: The type of the IOC (e.g., ip, url, hash, domain).</li>
+                        <li><code>ioc_value</code>: The value of the IOC.</li>
+                    </ul>
+
+                    <h6><strong>Optional Columns:</strong></h6>
+                    <ul>
+                        <li><code>category</code>: The category for the source (defaults to 'General').</li>
+                        <li><code>keep</code>: Set to 'true' or '1' to prevent the source from being deleted by retention policies.</li>
+                        <li><code>ioc_tags</code>: Comma-separated tags for the individual IOC.</li>
+                    </ul>
+                    
+                    <h6 class="mt-4"><strong>Example:</strong></h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>title</th>
+                                    <th>content</th>
+                                    <th>ioc_type</th>
+                                    <th>ioc_value</th>
+                                    <th>category</th>
+                                    <th>ioc_tags</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Phishing Campaign Analysis</td>
+                                    <td>Analyzed a recent phishing campaign.</td>
+                                    <td>ip</td>
+                                    <td>192.168.1.100</td>
+                                    <td>Phishing</td>
+                                    <td>campaign-alpha,c2</td>
+                                </tr>
+                                <tr>
+                                    <td>Phishing Campaign Analysis</td>
+                                    <td>Analyzed a recent phishing campaign.</td>
+                                    <td>url</td>
+                                    <td>http://evil-site.com/login.php</td>
+                                    <td>Phishing</td>
+                                    <td>phishing-kit,login</td>
+                                </tr>
+                                <tr>
+                                    <td>Malware Sample #45B</td>
+                                    <td>Reverse engineered malware sample.</td>
+                                    <td>hash</td>
+                                    <td>...</td>
+                                    <td>Malware</td>
+                                    <td>dropper,emotet</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

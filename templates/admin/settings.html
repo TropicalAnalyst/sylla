@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Global Retention Period -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-6 mb-4 mb-md-0">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Global Retention Period</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="needs-validation" novalidate>
+                        <input type="hidden" name="action" value="update_retention">
+                        <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
+                            <input type="number" class="form-control" id="retention_days" name="retention_days" value="{{ retention_days }}" min="0" max="180" readonly style="max-width: 200px; background: #f5f5f5; color: #888;">
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary" id="edit-retention-btn" onclick="enableRetentionEdit()">Edit</button>
+                                <button type="submit" class="btn btn-primary d-none" id="save-retention-btn">Save</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="form-text mt-3">
+                        {% if retention_days == 0 %}
+                            <strong>Retention is disabled. Sources will never be deleted automatically.</strong><br>
+                        {% else %}
+                            Current retention period: <strong>{{ retention_days }} days</strong><br>
+                            This is the default retention period for all sources.<br>
+                            Minimum: 30 days, Maximum: 180 days. Set to 0 to disable retention. Retention is calculated using the system's date and time.<br>
+                            <strong>Note:</strong> Unless protected against retention, the global retention period is used.
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Audit Log (Last 30 Days)</h5>
+                    <a href="{{ url_for('export_logs') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-file-export me-2"></i>Export CSV</a>
+                </div>
+                <div class="card-body">
+                    {% if audit_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th class="text-nowrap">Date</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in audit_logs %}
+                                <tr>
+                                    <td class="text-nowrap">{{ format_dt(log.created_at) }}</td>
+                                    <td class="text-nowrap">{{ users_map.get(log.user_id, log.user_id) }}</td>
+                                    <td class="text-nowrap">{{ log.action }}</td>
+                                    <td>{{ log.details }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="small text-muted">Showing the most recent {{ audit_logs|length }} events.</div>
+                    {% else %}
+                        <p class="text-muted mb-0">No audit entries in the last 30 days.</p>
+                    {% endif %}
+                    <div class="mt-2 small">
+                        <a href="{{ url_for('view_logs') }}">View full audit log</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Sources Card -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-6 mb-4 mb-md-0">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Export Sources</h5>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <p class="text-muted small mb-3">Export all sources to a CSV file for backup or analysis.</p>
+                    <form method="GET" action="{{ url_for('export_sources') }}" class="mt-auto">
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-download me-2"></i>Export All Sources (CSV)
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <!-- Import Sources Card -->
+        <div class="col-12 col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Import Sources</h5>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <p class="text-muted small mb-3">Import sources from a CSV file. Make sure the file has the correct format.</p>
+                    <form method="POST" action="{{ url_for('import_sources') }}" enctype="multipart/form-data" class="mt-auto">
+                        <div class="mb-3">
+                            <input type="file" class="form-control" name="csv_file" accept=".csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-outline-success w-100">
+                            <i class="fas fa-upload me-2"></i>Import CSV
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Retention Management Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Retention Management</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Cleanup Expired Notes</h6>
+                            <p class="text-muted small mb-3">Manually delete notes that have exceeded the retention period. Only unprotected notes will be deleted.</p>
+                            <form method="POST" action="{{ url_for('cleanup_expired') }}" class="d-inline">
+                                <button type="submit" class="btn btn-outline-warning" onclick="return confirm('Are you sure you want to delete all expired notes? This action cannot be undone.')">
+                                    <i class="fas fa-trash me-2"></i>Cleanup Expired Notes
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin_settings') }}" class="mt-3">
+                                <input type="hidden" name="action" value="update_cleanup_scheduler">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="autoCleanupToggle" name="auto_cleanup_enabled" {% if cleanup_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="autoCleanupToggle">Enable automatic cleanup (unchecked by default)</label>
+                                </div>
+                                <label class="form-label small" for="cleanup_interval_minutes">Run every (minutes)</label>
+                                <input type="number" class="form-control" id="cleanup_interval_minutes" name="cleanup_interval_minutes" value="{{ cleanup_interval }}" min="5" style="max-width: 200px;">
+                                <button type="submit" class="btn btn-outline-primary mt-2">
+                                    <i class="fas fa-save me-1"></i>Save Cleanup Scheduler
+                                </button>
+                                <div class="form-text">Runs a background cleanup of expired, unprotected sources.</div>
+                            </form>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Retention Information</h6>
+                            <ul class="list-unstyled small text-muted">
+                                <li><i class="fas fa-info-circle me-2"></i>Current retention period: <strong>{{ retention_days }} days</strong></li>
+                                <li><i class="fas fa-shield-alt me-2"></i>Protected notes are never deleted</li>
+                                <li><i class="fas fa-clock me-2"></i>Expired notes are automatically eligible for cleanup</li>
+                                <li><i class="fas fa-exclamation-triangle me-2"></i>This action is irreversible</li>
+                            </ul>
+                            
+                            {% if retention_stats %}
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <h6 class="text-muted mb-2">Retention Statistics</h6>
+                                <div class="row text-center">
+                                    <div class="col-3">
+                                        <div class="text-primary fw-bold">{{ retention_stats.total_notes }}</div>
+                                        <small class="text-muted">Total</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="text-success fw-bold">{{ retention_stats.protected_notes }}</div>
+                                        <small class="text-muted">Protected</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="text-warning fw-bold">{{ retention_stats.expired_notes }}</div>
+                                        <small class="text-muted">Expired</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="text-info fw-bold">{{ retention_stats.expiring_soon }}</div>
+                                        <small class="text-muted">Expiring Soon</small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Rule Scheduler Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Event Rule Scheduler</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Automatically run event rules on a cadence to surface new events without manual clicks.</p>
+                    <form method="POST" action="{{ url_for('admin_settings') }}" class="row g-3 align-items-end">
+                        <input type="hidden" name="action" value="update_event_rule_scheduler">
+                        <div class="col-md-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="eventRuleSchedulerToggle" name="event_rule_scheduler_enabled" {% if rule_scheduler_enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="eventRuleSchedulerToggle">Enable scheduled runs</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="event_rule_interval_minutes">Run every (minutes)</label>
+                            <input type="number" class="form-control" id="event_rule_interval_minutes" name="event_rule_interval_minutes" value="{{ rule_scheduler_interval }}" min="1">
+                        </div>
+                        <div class="col-md-4 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-save me-1"></i>Save</button>
+                            <a href="{{ url_for('run_event_rules') }}" class="btn btn-outline-secondary flex-fill"><i class="fas fa-play me-1"></i>Run Now</a>
+                        </div>
+                        <div class="col-12 small text-muted">Default cadence: 5 minutes. Uses the same rules defined in Event Rules.</div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Danger Zone Card -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-danger shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Danger Zone</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between">
+                        <div class="mb-3 mb-sm-0">
+                            <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAllModal">
+                                <i class="fas fa-trash me-2"></i>Delete ALL Data & Reset Admin
+                            </button>
+                            <div class="form-text text-danger mt-2">
+                                This will delete EVERYTHING and defaults EVERYTHING. Type <b>Confirm</b> in the popup to proceed.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete All Modal -->
+    <div class="modal fade" id="deleteAllModal" tabindex="-1" aria-labelledby="deleteAllModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="POST" action="{{ url_for('reset_database') }}">
+            <div class="modal-header bg-danger text-white">
+              <h5 class="modal-title" id="deleteAllModalLabel">Confirm Database Reset</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p>This will permanently delete <b>ALL</b> data and recreate the default admin user. Type <b>Confirm</b> below to proceed.</p>
+              <input type="text" class="form-control" name="confirm_text" placeholder="Type Confirm to proceed" required>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-danger">Delete & Reset</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+function enableRetentionEdit() {
+  document.getElementById('retention_days').removeAttribute('readonly');
+  document.getElementById('retention_days').style.background = '#fff';
+  document.getElementById('retention_days').style.color = '#222';
+  document.getElementById('edit-retention-btn').classList.add('d-none');
+  document.getElementById('save-retention-btn').classList.remove('d-none');
+  document.getElementById('retention_days').focus();
+}
+
+// Form validation
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %} 

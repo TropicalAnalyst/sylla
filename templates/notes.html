@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+
+{% block title %}All Sources{% endblock %}
+
+{% block content %}
+<body data-has-advanced-filters="{% if user_query or date_from or date_to or ioc_type or ioc_value or ioc_tags or keep_only %}true{% else %}false{% endif %}">
+<div class="container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            All Sources
+        </h1>
+        {% if current_user.has_permission('can_create') %}
+        <a href="{{ url_for('new_note') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>New Source
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Sources</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ notes.total }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-file-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Protected</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set protected_count = notes.items|selectattr('keep', 'equalto', true)|list|length %}
+                                {{ protected_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-shield-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Expiring Soon</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ expiring_soon }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow-sm h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Expired</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ expired }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filters Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-search me-2"></i>Search & Filters
+            </h6>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('index') }}" method="GET" id="searchForm">
+                <!-- Basic Search Row -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Search Sources</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" name="search" 
+                                   value="{{ search_query }}" 
+                                   placeholder="Search by title, content, or IOCs...">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" name="category">
+                            <option value="">All Categories</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.name }}" {% if category_filter == cat.name %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="d-flex gap-2 w-100">
+                            <button type="submit" class="btn btn-primary flex-fill">
+                                <i class="fas fa-search me-1"></i>Search
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="toggleAdvanced">
+                                <i class="fas fa-filter"></i>
+                            </button>
+                            {% if search_query or category_filter or user_query or date_from or date_to or ioc_type or ioc_value or ioc_tags or keep_only %}
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-danger">
+                                <i class="fas fa-times"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Search (Collapsible) -->
+                <div id="advancedSearch" class="collapse">
+                    <hr>
+                    <h6 class="mb-3">
+                        <i class="fas fa-cogs me-1"></i>Advanced Filters
+                    </h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Created By</label>
+                            <select class="form-select" name="user">
+                                <option value="">All Users</option>
+                                {% for user in users %}
+                                <option value="{{ user.username }}" {% if user_query == user.username %}selected{% endif %}>
+                                    {{ user.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Keep Status</label>
+                            <select class="form-select" name="keep_only">
+                                <option value="">All Sources</option>
+                                <option value="true" {% if keep_only == 'true' %}selected{% endif %}>Protected Only</option>
+                                <option value="false" {% if keep_only == 'false' %}selected{% endif %}>Not Protected</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Date From</label>
+                            <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Date To</label>
+                            <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">IOC Type</label>
+                            <select class="form-select" name="ioc_type">
+                                <option value="">All Types</option>
+                                <option value="ip" {% if ioc_type == 'ip' %}selected{% endif %}>IP Address</option>
+                                <option value="domain" {% if ioc_type == 'domain' %}selected{% endif %}>Domain</option>
+                                <option value="url" {% if ioc_type == 'url' %}selected{% endif %}>URL</option>
+                                <option value="hash" {% if ioc_type == 'hash' %}selected{% endif %}>Hash</option>
+                                <option value="email address" {% if ioc_type == 'email address' %}selected{% endif %}>Email</option>
+                                <option value="username" {% if ioc_type == 'username' %}selected{% endif %}>Username</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">IOC Value</label>
+                            <input type="text" class="form-control" name="ioc_value" value="{{ ioc_value }}" placeholder="Search IOC values...">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">IOC Tags</label>
+                            <input type="text" class="form-control" name="ioc_tags" value="{{ ioc_tags }}" placeholder="Search IOC tags...">
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Card -->
+    <div class="card shadow-sm">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-list me-2"></i>Sources
+                {% if notes.total > 0 %}
+                <span class="badge bg-secondary ms-2">{{ notes.total }} total</span>
+                {% endif %}
+            </h6>
+            {% if notes.total > 0 %}
+            <small class="text-muted">
+                Showing {{ notes.items|length }} of {{ notes.total }} sources
+            </small>
+            {% endif %}
+        </div>
+            {% if current_user.has_permission('can_delete') %}
+            <div class="d-flex align-items-center gap-2 ms-3">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="selectAllNotes">
+                    <label class="form-check-label" for="selectAllNotes">Select All</label>
+                </div>
+                <button class="btn btn-sm btn-danger" id="bulkDeleteBtn" disabled>
+                    <i class="fas fa-trash me-1"></i>Delete Selected
+                </button>
+            </div>
+            {% endif %}
+        <div class="card-body">
+            {% if notes.items %}
+            <div class="row g-4">
+                {% for note in notes.items %}
+                <div class="col-12 col-lg-6 col-xl-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-header bg-transparent border-bottom-0 pb-0">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    {% if current_user.has_permission('can_delete') %}
+                                    <div class="form-check">
+                                        <input class="form-check-input note-select" type="checkbox" value="{{ note.id }}">
+                                    </div>
+                                    {% endif %}
+                                <div class="flex-grow-1 me-2">
+                                    <h6 class="card-title mb-1">
+                                        <a href="{{ url_for('view_note', note_id=note.id) }}" class="text-decoration-none text-dark">
+                                            {{ note.truncated_title }}
+                                        </a>
+                                    </h6>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="badge bg-primary">{{ note.category }}</span>
+                                        {% if note.keep %}
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-shield-alt me-1"></i>Protected
+                                        </span>
+                                        {% endif %}
+                                        {% if note.iocs %}
+                                        <span class="badge bg-info">{{ note.iocs|length }} IOC{{ 's' if note.iocs|length != 1 else '' }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                            data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><a class="dropdown-item" href="{{ url_for('view_note', note_id=note.id) }}">
+                                            <i class="fas fa-eye me-2"></i>View Details
+                                        </a></li>
+                                        {% if current_user.has_permission('can_edit') or current_user.id == note.user_id %}
+                                        <li><a class="dropdown-item" href="{{ url_for('edit_note', note_id=note.id) }}">
+                                            <i class="fas fa-edit me-2"></i>Edit
+                                        </a></li>
+                                        {% endif %}
+                                        {% if current_user.has_permission('can_delete') or current_user.id == note.user_id %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <form action="{{ url_for('delete_note', note_id=note.id) }}" method="POST" 
+                                                  class="d-inline" onsubmit="return confirm('Are you sure you want to delete this source?')">
+                                                <button type="submit" class="dropdown-item text-danger">
+                                                    <i class="fas fa-trash me-2"></i>Delete
+                                                </button>
+                                            </form>
+                                        </li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body pt-0">
+                            <p class="card-text text-muted">{{ note.truncated_content }}</p>
+                            {% if note.content_overflow %}
+                            <a href="{{ url_for('view_note', note_id=note.id) }}" class="btn btn-sm btn-outline-primary">
+                                Read More
+                            </a>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 pt-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-2" 
+                                         style="width: 24px; height: 24px;">
+                                        <span class="text-white fw-bold small">{{ note.user.username[0].upper() }}</span>
+                                    </div>
+                                    <small class="text-muted">{{ note.user.username }}</small>
+                                </div>
+                                <small class="text-muted">{{ format_dt(note.created_at, include_time=False) }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Pagination -->
+            {% if notes.pages > 1 %}
+            <nav aria-label="Sources pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if notes.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=notes.prev_num, search=search_query, category=category_filter, user=user_query, date_from=date_from, date_to=date_to, ioc_type=ioc_type, ioc_value=ioc_value, ioc_tags=ioc_tags, keep_only=keep_only) }}">
+                            <i class="fas fa-chevron-left me-1"></i>Previous
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in notes.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            {% if page_num != notes.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('index', page=page_num, search=search_query, category=category_filter, user=user_query, date_from=date_from, date_to=date_to, ioc_type=ioc_type, ioc_value=ioc_value, ioc_tags=ioc_tags, keep_only=keep_only) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if notes.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=notes.next_num, search=search_query, category=category_filter, user=user_query, date_from=date_from, date_to=date_to, ioc_type=ioc_type, ioc_value=ioc_value, ioc_tags=ioc_tags, keep_only=keep_only) }}">
+                            Next<i class="fas fa-chevron-right ms-1"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <!-- Empty State -->
+            <div class="text-center py-5">
+                <div class="empty-state">
+                    <i class="fas fa-search fa-4x text-muted mb-4"></i>
+                    <h4 class="text-muted mb-3">
+                        {% if search_query or category_filter or user_query or date_from or date_to or ioc_type or ioc_value or ioc_tags or keep_only %}
+                            No sources found
+                        {% else %}
+                            No sources yet
+                        {% endif %}
+                    </h4>
+                    <p class="text-muted mb-4">
+                        {% if search_query or category_filter or user_query or date_from or date_to or ioc_type or ioc_value or ioc_tags or keep_only %}
+                            Try adjusting your search criteria or browse all sources.
+                        {% else %}
+                            Get started by creating your first intelligence source.
+                        {% endif %}
+                    </p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        {% if search_query or category_filter or user_query or date_from or date_to or ioc_type or ioc_value or ioc_tags or keep_only %}
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-times me-1"></i>Clear Filters
+                        </a>
+                        {% endif %}
+                        {% if current_user.has_permission('can_create') %}
+                        <a href="{{ url_for('new_note') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Create First Source
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('toggleAdvanced');
+    const advancedSearch = document.getElementById('advancedSearch');
+    const hasAdvancedFilters = document.body.getAttribute('data-has-advanced-filters') === 'true';
+    
+    toggleBtn.addEventListener('click', function() {
+        const bsCollapse = new bootstrap.Collapse(advancedSearch, {
+            toggle: true
+        });
+        
+        // Update button text and icon
+        if (advancedSearch.classList.contains('show')) {
+            toggleBtn.innerHTML = '<i class="fas fa-filter"></i>';
+            toggleBtn.classList.remove('btn-primary');
+            toggleBtn.classList.add('btn-outline-secondary');
+        } else {
+            toggleBtn.innerHTML = '<i class="fas fa-filter"></i> Advanced';
+            toggleBtn.classList.remove('btn-outline-secondary');
+            toggleBtn.classList.add('btn-primary');
+        }
+    });
+    
+    // Show advanced search if any advanced filters are active
+    if (hasAdvancedFilters && advancedSearch) {
+        advancedSearch.classList.add('show');
+        if (toggleBtn) {
+            toggleBtn.innerHTML = '<i class="fas fa-filter"></i> Advanced';
+            toggleBtn.classList.remove('btn-outline-secondary');
+            toggleBtn.classList.add('btn-primary');
+        }
+    }
+
+    const selectAllNotes = document.getElementById('selectAllNotes');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    const noteCheckboxes = document.querySelectorAll('.note-select');
+    const selectedNotes = new Set();
+
+    function syncBulkState() {
+        if (!bulkDeleteBtn) return;
+        bulkDeleteBtn.disabled = selectedNotes.size === 0;
+        if (selectAllNotes) {
+            const total = noteCheckboxes.length;
+            const checked = selectedNotes.size;
+            selectAllNotes.checked = total > 0 && checked === total;
+            selectAllNotes.indeterminate = checked > 0 && checked < total;
+        }
+    }
+
+    noteCheckboxes.forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const id = parseInt(e.target.value);
+            if (e.target.checked) {
+                selectedNotes.add(id);
+            } else {
+                selectedNotes.delete(id);
+            }
+            syncBulkState();
+        });
+    });
+
+    if (selectAllNotes) {
+        selectAllNotes.addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            noteCheckboxes.forEach(cb => {
+                cb.checked = checked;
+                const id = parseInt(cb.value);
+                if (checked) {
+                    selectedNotes.add(id);
+                } else {
+                    selectedNotes.delete(id);
+                }
+            });
+            syncBulkState();
+        });
+    }
+
+    if (bulkDeleteBtn) {
+        bulkDeleteBtn.addEventListener('click', async () => {
+            if (selectedNotes.size === 0) return;
+            if (!confirm(`Delete ${selectedNotes.size} selected source(s)? Protected sources will be skipped.`)) return;
+            bulkDeleteBtn.disabled = true;
+            try {
+                const response = await fetch('{{ url_for('bulk_delete_notes') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note_ids: Array.from(selectedNotes) })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    alert(data.error || 'Bulk delete failed');
+                } else {
+                    const skipped = data.skipped?.length || 0;
+                    alert(`Deleted ${data.deleted} source(s). Skipped ${skipped}.`);
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert('Bulk delete failed');
+            } finally {
+                bulkDeleteBtn.disabled = false;
+            }
+        });
+    }
+});
+</script>
+
+<style>
+.empty-state {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (max-width: 768px) {
+    .card-title {
+        font-size: 0.9rem;
+    }
+    
+    .btn {
+        font-size: 0.875rem;
+    }
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Event Details</h1>
+                <div>
+                    {% if current_user.role.name in ['Admin', 'Editor'] %}
+                        {% if event.status == 'new' %}
+                        <form method="POST" action="{{ url_for('acknowledge_event', event_id=event.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-warning me-2">
+                                <i class="fas fa-check me-2"></i>Acknowledge
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% if event.status in ['new', 'acknowledged'] %}
+                        <form method="POST" action="{{ url_for('resolve_event', event_id=event.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-success me-2">
+                                <i class="fas fa-flag-checkered me-2"></i>Resolve
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% endif %}
+                    <a href="{{ url_for('events') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Events
+                    </a>
+                </div>
+            </div>
+
+            <!-- Event Details -->
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">{{ event.title }}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Type:</strong> 
+                                    <span class="badge bg-info">{{ event.event_type.replace('_', ' ').title() }}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Status:</strong>
+                                    {% if event.status == 'new' %}
+                                        <span class="badge bg-primary">New</span>
+                                    {% elif event.status == 'acknowledged' %}
+                                        <span class="badge bg-warning">Acknowledged</span>
+                                    {% elif event.status == 'resolved' %}
+                                        <span class="badge bg-success">Resolved</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ event.status.title() }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Created:</strong> {{ format_dt(event.created_at, include_seconds=True) }}
+                                </div>
+                            </div>
+                            
+                            {% if event.acknowledged_at %}
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Acknowledged:</strong> {{ format_dt(event.acknowledged_at, include_seconds=True) }}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>By:</strong> 
+                                    {% set ack_user = User.query.get(event.acknowledged_by) %}
+                                    {{ ack_user.username if ack_user else 'Unknown' }}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if event.resolved_at %}
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Resolved:</strong> {{ format_dt(event.resolved_at, include_seconds=True) }}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>By:</strong> 
+                                    {% set res_user = User.query.get(event.resolved_by) %}
+                                    {{ res_user.username if res_user else 'Unknown' }}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <strong>Description:</strong>
+                                <p class="mt-2">{{ event.description }}</p>
+                            </div>
+                            
+                            {% if event.triggered_by_rule %}
+                            <div class="mb-3">
+                                <strong>Triggered by Rule:</strong>
+                                {% set rule = EventRule.query.get(event.triggered_by_rule) %}
+                                <span class="badge bg-secondary">{{ rule.name if rule else 'Unknown Rule' }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Quick Actions</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                {% if current_user.role.name == 'Admin' %}
+                                <a href="{{ url_for('event_rules') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-cog me-2"></i>Manage Rules
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

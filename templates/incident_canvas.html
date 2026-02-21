@@ -1,0 +1,1359 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .incident-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        border-radius: 0.75rem;
+    }
+    .incident-meta .badge { font-size: 0.85rem; }
+    .ioc-canvas {
+        background: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        min-height: 300px;
+    }
+    .ioc-item {
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        background: white;
+    }
+    .ioc-type-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        background: #e7f1ff;
+        color: #0d6efd;
+        font-size: 0.8rem;
+        text-transform: capitalize;
+    }
+    .paste-instruction { text-align: center; color: #6c757d; }
+    .search-results .ioc-item { margin-bottom: 0.5rem; }
+    .link-type-badge {
+        display: inline-block;
+        padding: 0.2rem 0.45rem;
+        border-radius: 0.35rem;
+        background: #eef2ff;
+        color: #3949ab;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+    .incident-note { border: 1px solid #e9ecef; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .incident-link-item { border: 1px solid #e9ecef; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.75rem; }
+</style>
+
+<div class="container-fluid">
+    <div class="incident-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+                <div class="incident-meta d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span class="badge bg-light text-dark">Status: {{ incident.status|capitalize }}</span>
+                    <span class="badge bg-warning text-dark">Severity: {{ incident.severity|capitalize }}</span>
+                    <span class="badge bg-light text-dark">IOCs: <span id="ioc-count">0</span></span>
+                </div>
+                <h2 class="mb-1">{{ incident.title }}</h2>
+                <p class="mb-0 small">Opened on {{ format_dt(incident.created_at) if incident.created_at else '' }} by {{ owner_name }}</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#inviteModal">
+                    <i class="fas fa-share me-1"></i>Invite
+                </button>
+                <button class="btn btn-success" id="closeIncidentBtn" {% if incident.status != 'active' %}disabled{% endif %} data-bs-toggle="modal" data-bs-target="#completeModal">
+                    <i class="fas fa-check me-1"></i>Complete
+                </button>
+                <button class="btn btn-outline-danger" id="deleteIncidentBtn">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="canvas-tab" data-bs-toggle="tab" data-bs-target="#canvas" type="button" role="tab">
+                <i class="fas fa-edit me-1"></i>Canvas
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="announcements-tab" data-bs-toggle="tab" data-bs-target="#announcements" type="button" role="tab">
+                <i class="fas fa-bullhorn me-1"></i>Announcements
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="links-tab" data-bs-toggle="tab" data-bs-target="#links" type="button" role="tab">
+                <i class="fas fa-link me-1"></i>Quick Links
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="search-tab" data-bs-toggle="tab" data-bs-target="#search" type="button" role="tab">
+                <i class="fas fa-search me-1"></i>Search IOCs
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="relationships-tab" data-bs-toggle="tab" data-bs-target="#relationships" type="button" role="tab">
+                <i class="fas fa-link me-1"></i>Related Sources
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Canvas Tab -->
+        <div class="tab-pane fade show active" id="canvas" role="tabpanel">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <label class="form-label fw-bold mb-2">Quick Paste IOCs</label>
+                    <textarea class="form-control" id="iocInput" rows="4" placeholder="Paste IOCs here" {% if incident.status != 'active' %}disabled{% endif %}></textarea>
+                    <div class="row align-items-center mt-2 g-2">
+                        <div class="col-md-6">
+                            <small class="form-text text-muted">Supported types: Email, URL, IP Address, Domain, Hash (MD5/SHA1/SHA256), Username</small>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <label class="form-label mb-0 me-2">Type override</label>
+                            <select id="addTypeOverride" class="form-select form-select-sm d-inline-block" style="width: 180px;">
+                                <option value="auto" selected>Auto-detect</option>
+                                <option value="email address">Email</option>
+                                <option value="url">URL</option>
+                                <option value="domain">Domain</option>
+                                <option value="ip">IP Address</option>
+                                <option value="hash">Hash</option>
+                                <option value="username">Username</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <button class="btn btn-primary" id="addIocBtn" {% if incident.status != 'active' %}disabled{% endif %}>
+                            <i class="fas fa-plus me-1"></i>Add to Canvas
+                        </button>
+                        {% if incident.status != 'active' %}
+                        <small class="text-light bg-secondary px-2 py-1 rounded"><i class="fas fa-lock me-1"></i>Completed incidents are read-only.</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Logged IOCs</h5>
+                        <div class="d-flex gap-2">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filterDropdown" data-bs-toggle="dropdown">
+                                    <i class="fas fa-filter me-1"></i>Filter
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="filterDropdown">
+                                    <li><a class="dropdown-item active" href="#" onclick="filterIOCs('all'); return false;"><i class="fas fa-list me-2"></i>All IOCs</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('email'); return false;"><i class="fas fa-envelope me-2"></i>Email</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('url'); return false;"><i class="fas fa-link me-2"></i>URL</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('domain'); return false;"><i class="fas fa-globe me-2"></i>Domain</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('ip'); return false;"><i class="fas fa-network-wired me-2"></i>IP Address</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('hash'); return false;"><i class="fas fa-hashtag me-2"></i>Hash</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="filterIOCs('username'); return false;"><i class="fas fa-user me-2"></i>Username</a></li>
+                                </ul>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" id="selectAllBtn" title="Select all IOCs"><i class="fas fa-check-square me-1"></i>Select All</button>
+                            <button class="btn btn-sm btn-outline-info" id="bulkCommentBtn" title="Select IOCs and add bulk comment"><i class="fas fa-comments me-1"></i>Bulk Comment</button>
+                            <button class="btn btn-sm btn-outline-primary" id="bulkTypeBtn" title="Select IOCs and change their type"><i class="fas fa-exchange-alt me-1"></i>Bulk Set Type</button>
+                        </div>
+                    </div>
+                    <div class="ioc-canvas" id="iocCanvas">
+                        <div class="paste-instruction">
+                            <i class="fas fa-cloud-upload-alt fa-3x mb-3 d-block"></i>
+                            <p>IOCs will appear here as you add them</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card sticky-top" style="top: 20px;">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>IOC Statistics</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Total IOCs</small>
+                                <h4 id="totalIocs" class="mb-0">0</h4>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted d-block">By Type</small>
+                                <div id="iocTypeStats" class="small">
+                                    <div class="d-flex justify-content-between"><span>Email:</span><strong id="count-email-address">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>URL:</span><strong id="count-url">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>Domain:</span><strong id="count-domain">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>IP:</span><strong id="count-ip">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>Hash:</span><strong id="count-hash">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>Username:</span><strong id="count-username">0</strong></div>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary w-100" id="refreshBtn"><i class="fas fa-sync me-1"></i>Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="fas fa-bullhorn me-2"></i>Announcements & Links</h6>
+                        </div>
+                        <div class="card-body p-2" style="max-height: 400px; overflow-y: auto;">
+                            <div class="mb-3">
+                                <small class="text-muted fw-bold">Announcements</small>
+                                <div id="sidebarAnnouncements" class="small">
+                                    <div class="text-center text-muted py-2"><small><i class="fas fa-inbox me-1"></i>No announcements</small></div>
+                                </div>
+                                <button class="btn btn-xs btn-primary w-100 mt-2" style="font-size: 0.75rem; padding: 0.35rem;" onclick="switchToTab('announcements')"><i class="fas fa-plus me-1"></i>Add Announcement</button>
+                            </div>
+                            <hr class="my-2">
+                            <div>
+                                <small class="text-muted fw-bold">Quick Links</small>
+                                <div id="sidebarQuickLinks" class="small">
+                                    <div class="text-center text-muted py-2"><small><i class="fas fa-link me-1"></i>No links</small></div>
+                                </div>
+                                <button class="btn btn-xs btn-secondary w-100 mt-2" style="font-size: 0.75rem; padding: 0.35rem;" onclick="switchToTab('links')"><i class="fas fa-plus me-1"></i>Add Link</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Announcements Tab -->
+        <div class="tab-pane fade" id="announcements" role="tabpanel">
+            <div class="card mb-4">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-pencil me-2"></i>Add Announcement</h6></div>
+                <div class="card-body">
+                    <div class="mb-3"><label class="form-label fw-bold">Title</label><input type="text" class="form-control" id="announcementTitle" placeholder="e.g., User compromised, Domain blocked..."></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Message</label><textarea class="form-control" id="announcementContent" rows="4" placeholder="Important information for the team..."></textarea></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Priority</label>
+                        <select class="form-select" id="announcementPriority">
+                            <option value="low">Low</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="addAnnouncementBtn"><i class="fas fa-plus me-1"></i>Post Announcement</button>
+                </div>
+            </div>
+            <h5 class="mb-3">Team Announcements</h5>
+            <div id="announcementsContainer">
+                <div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>No announcements yet</div>
+            </div>
+        </div>
+
+        <!-- Quick Links Tab -->
+        <div class="tab-pane fade" id="links" role="tabpanel">
+            <div class="card mb-4">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-link me-2"></i>Add Quick Link</h6></div>
+                <div class="card-body">
+                    <div class="mb-3"><label class="form-label fw-bold">Link Title</label><input type="text" class="form-control" id="linkTitle" placeholder="e.g., Malware DB, Ticket #123..."></div>
+                    <div class="mb-3"><label class="form-label fw-bold">URL</label><input type="url" class="form-control" id="linkUrl" placeholder="https://..."></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Link Type</label>
+                        <select class="form-select" id="linkType">
+                            <option value="reference">Reference</option>
+                            <option value="article">Article</option>
+                            <option value="ticket">Support Ticket</option>
+                            <option value="report">Report/Analysis</option>
+                            <option value="malware_db">Malware DB</option>
+                            <option value="threat_intel">Threat Intel</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="addLinkBtn"><i class="fas fa-plus me-1"></i>Add Link</button>
+                </div>
+            </div>
+            <h5 class="mb-3">Quick References</h5>
+            <div id="linksContainer">
+                <div class="text-center text-muted py-4"><i class="fas fa-link fa-2x mb-2 d-block"></i>No links added yet</div>
+            </div>
+        </div>
+
+        <!-- Search Tab -->
+        <div class="tab-pane fade" id="search" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <div class="input-group input-group-lg mb-3">
+                        <span class="input-group-text bg-light"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control form-control-lg" id="searchInput" placeholder="Search by IOC value or analyst notes...">
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="searchSelectAll">
+                            <label class="form-check-label" for="searchSelectAll">Select all results</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-info" id="searchBulkComment"><i class="fas fa-comments me-1"></i>Bulk Comment</button>
+                        <button class="btn btn-sm btn-outline-primary" id="searchBulkType"><i class="fas fa-exchange-alt me-1"></i>Bulk Set Type</button>
+                    </div>
+                    <div id="searchResults" class="search-results">
+                        <div class="text-center text-muted py-4"><i class="fas fa-search fa-2x mb-2 d-block"></i>Start typing to search IOCs</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Relationships Tab -->
+        <div class="tab-pane fade" id="relationships" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>Shows relationships between incident IOCs and existing sources in the database</p>
+                    <div id="relationshipsContent" class="relationships-content">
+                        <div class="text-center text-muted py-4"><i class="fas fa-link fa-2x mb-2 d-block"></i>Loading relationships...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Comment Modal -->
+<div class="modal fade" id="bulkCommentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-comments me-2"></i>Add Comment to Selected IOCs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info mb-3"><strong id="selectedCount">0</strong> IOCs selected</div>
+                <label class="form-label fw-bold">Comment</label>
+                <textarea class="form-control" id="bulkCommentText" rows="4" placeholder="Add a note that will be appended to all selected IOCs..."></textarea>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="replaceBulkComment" value="">
+                    <label class="form-check-label" for="replaceBulkComment">Replace existing comments (instead of appending)</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="applyBulkCommentBtn"><i class="fas fa-check me-1"></i>Apply to Selected</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Type Modal -->
+<div class="modal fade" id="bulkTypeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Set Type for Selected</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info mb-3"><strong id="selectedCountType">Use current selection</strong></div>
+                <label class="form-label fw-bold">IOC Type</label>
+                <select id="bulkTypeSelect" class="form-select">
+                    <option value="email address">Email</option>
+                    <option value="url">URL</option>
+                    <option value="domain">Domain</option>
+                    <option value="ip">IP Address</option>
+                    <option value="hash">Hash</option>
+                    <option value="username">Username</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="applyBulkTypeBtn"><i class="fas fa-check me-1"></i>Apply to Selected</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Invite Modal -->
+<div class="modal fade" id="inviteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-share me-2"></i>Invite Team Members</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Share this link with your team to join the incident response:</p>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="inviteUrl" value="{{ url_for('incident_canvas', incident_id=incident.id, _external=True) }}" readonly>
+                    <button class="btn btn-outline-secondary" type="button" id="copyBtn"><i class="fas fa-copy me-1"></i>Copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Complete Incident Modal -->
+<div class="modal fade" id="completeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-check-circle me-2"></i>Complete Incident</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('complete_incident', incident_id=incident.id) }}">
+                <div class="modal-body">
+                    <p>Complete this incident and optionally save all IOCs to the main database as a unified source.</p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="createNote" name="create_note" checked>
+                        <label class="form-check-label" for="createNote"><strong>Create a Note</strong> - Save all {{ incident.incident_iocs|length }} IOCs as a new note titled "[Incident Response] {{ incident.title }}"</label>
+                    </div>
+                    <div class="alert alert-info mt-3"><small><i class="fas fa-lightbulb me-2"></i>This will preserve all IOCs and their context. You can always view them later through the notes section.</small></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check me-1"></i>Complete Incident</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const incidentId = {{ incident.id }};
+const currentUserId = {{ current_user.id }};
+const currentIncidentStatus = '{{ incident.status }}';
+const noteUrlTemplate = "{{ url_for('view_note', note_id=0) }}";
+
+// IOC Detection Regex Patterns
+const iocPatterns = {
+    'email address': /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi,
+    'url': /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&/=]*)/gi,
+    'ip': /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/gi,
+    'domain': /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}/gi,
+    'hash': /\b(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b/gi,
+    'username': /\b[a-zA-Z0-9_]{3,}\b/gi
+};
+
+let iocsList = [];
+let allIOCs = [];
+
+const filterAliases = {
+    'all': 'all',
+    'email': 'email address',
+    'email-address': 'email address',
+    'email address': 'email address',
+    'url': 'url',
+    'domain': 'domain',
+    'domain name': 'domain',
+    'domains': 'domain',
+    'ip': 'ip',
+    'hash': 'hash',
+    'username': 'username'
+};
+
+const allowedTypes = ['email address', 'url', 'domain', 'ip', 'hash', 'username'];
+
+// Load existing IOCs
+async function loadIOCs() {
+    try {
+        const response = await fetch(`/api/incidents/${incidentId}/iocs`);
+        const data = await response.json();
+        allIOCs = data.iocs || [];
+        renderIOCs();
+        updateStats();
+        loadRelationships();
+    } catch (error) {
+        console.error('Error loading IOCs:', error);
+    }
+}
+
+function sanitizeValue(raw) {
+    let cleaned = raw.trim();
+    cleaned = cleaned.replace(/^[`'"<\(\[]+/, '').replace(/[`'">\)\]]+$/, '');
+    cleaned = cleaned.replace(/[.,;:]+$/, '');
+    return cleaned;
+}
+
+function detectIOC(line) {
+    const cleaned = sanitizeValue(line);
+    if (!cleaned) return null;
+
+    // Reset regex state for globals
+    Object.values(iocPatterns).forEach(r => { if (r && r.lastIndex !== undefined) r.lastIndex = 0; });
+
+    if (iocPatterns['email address'].test(cleaned)) return 'email address';
+    if (iocPatterns['ip'].test(cleaned)) return 'ip';
+
+    const withoutScheme = cleaned.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+    const hostOnly = withoutScheme.split(/[\s/?#]/)[0].replace(/[.,;:]+$/, '');
+    const hasPath = withoutScheme.includes('/') || cleaned.includes('http://') || cleaned.includes('https://');
+
+    if (iocPatterns['domain'].test(hostOnly)) {
+        return hasPath ? 'url' : 'domain';
+    }
+
+    if (iocPatterns['url'].test(cleaned)) return 'url';
+    if (iocPatterns['hash'].test(cleaned)) return 'hash';
+    if (iocPatterns['username'].test(cleaned)) return 'username';
+    return null;
+}
+
+function parseIOCs(text) {
+    const lines = text.split(/\n|,|\s+/).filter(l => l.trim());
+    const iocs = [];
+    const seenValues = new Set();
+    const override = (document.getElementById('addTypeOverride')?.value || 'auto').toLowerCase();
+    
+    lines.forEach(line => {
+        const cleaned = sanitizeValue(line);
+        let type = override !== 'auto' ? override : detectIOC(cleaned);
+        if (type && !seenValues.has(cleaned.toLowerCase())) {
+            iocs.push({ type, value: cleaned });
+            seenValues.add(cleaned.toLowerCase());
+        }
+    });
+    
+    return iocs;
+}
+
+// Add IOCs
+document.getElementById('addIocBtn').addEventListener('click', async () => {
+    const input = document.getElementById('iocInput');
+    const text = input.value.trim();
+    
+    if (!text) {
+        alert('Please paste some IOCs');
+        return;
+    }
+    
+    const parsedIOCs = parseIOCs(text);
+    
+    if (parsedIOCs.length === 0) {
+        alert('No IOCs detected. Make sure to paste valid indicators.');
+        return;
+    }
+    
+    for (const ioc of parsedIOCs) {
+        try {
+            const response = await fetch(`/api/incidents/${incidentId}/iocs`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    type: ioc.type,
+                    value: ioc.value,
+                    analyst_note: ''
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                allIOCs.push(data.ioc);
+            } else if (response.status === 409) {
+                // Duplicate, skip
+                continue;
+            }
+        } catch (error) {
+            console.error('Error adding IOC:', error);
+        }
+    }
+    
+    input.value = '';
+    renderIOCs();
+    updateStats();
+    loadRelationships();
+});
+
+// Render IOCs
+let currentFilter = 'all';
+let selectedIOCs = new Set();
+
+function renderIOCs() {
+    const canvas = document.getElementById('iocCanvas');
+    
+    // Apply filter
+    const filterValue = filterAliases[currentFilter] || 'all';
+    let filteredIOCs = allIOCs;
+    if (filterValue !== 'all') {
+        filteredIOCs = allIOCs.filter(ioc => (ioc.type || '').toLowerCase() === filterValue);
+    }
+    
+    if (filteredIOCs.length === 0) {
+        if (currentFilter === 'all') {
+            canvas.innerHTML = `
+                <div class="paste-instruction">
+                    <i class="fas fa-cloud-upload-alt fa-3x mb-3 d-block text-muted"></i>
+                    <p>IOCs will appear here as you add them</p>
+                </div>
+            `;
+        } else {
+            canvas.innerHTML = `
+                <div class="paste-instruction">
+                    <i class="fas fa-filter fa-3x mb-3 d-block text-muted"></i>
+                    <p>No ${currentFilter} IOCs found</p>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" onclick="filterIOCs('all')">
+                        Clear Filter
+                    </button>
+                </div>
+            `;
+        }
+        return;
+    }
+    
+    canvas.innerHTML = filteredIOCs.map((ioc, idx) => `
+        <div class="ioc-item" data-ioc-id="${ioc.id}" style="display: flex; gap: 1rem;">
+            <div style="flex: 1; min-width: 0;">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="ioc-type-badge">${ioc.type}</span>
+                        <select class="form-select form-select-sm" style="width: 160px;" onchange="updateIOCType(${ioc.id}, this.value)">
+                            ${allowedTypes.map(t => `<option value="${t}" ${t === (ioc.type || '').toLowerCase() ? 'selected' : ''}>${t.replace('email address','Email').replace(/^./, c => c.toUpperCase())}</option>`).join('')}
+                        </select>
+                        ${ioc.converted_to_ioc_id ? `<span class="badge bg-success ms-2"><i class="fas fa-check me-1"></i>Converted to Source</span>` : ''}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteIOC(${ioc.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="ioc-value">${escapeHtml(ioc.value)}</div>
+                <textarea class="form-control ioc-note-input mt-2" placeholder="Add analyst note..." 
+                          onchange="updateIOCNote(${ioc.id}, this.value)"
+                          ${currentIncidentStatus !== 'active' ? 'readonly' : ''}>${ioc.analyst_note || ''}</textarea>
+                ${ioc.sources && ioc.sources.length > 0 ? `
+                    <div class="source-link">
+                        <i class="fas fa-link me-1"></i><strong>Related:</strong>
+                        ${ioc.sources.join(', ')}
+                    </div>
+                ` : ''}
+            </div>
+            <div style="padding-top: 0.5rem;">
+                <input type="checkbox" class="form-check-input ioc-checkbox" data-ioc-id="${ioc.id}" 
+                       onchange="toggleIOCSelection(${ioc.id}, this.checked)" style="width: 1.25em; height: 1.25em; cursor: pointer;">
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterIOCs(type) {
+    currentFilter = filterAliases[type] ? filterAliases[type] : 'all';
+    selectedIOCs.clear(); // Clear selection when filtering
+    renderIOCs();
+    updateFilterButton();
+}
+
+function updateFilterButton() {
+    const btn = document.getElementById('filterDropdown');
+    if ((filterAliases[currentFilter] || 'all') === 'all') {
+        btn.innerHTML = '<i class="fas fa-filter me-1"></i>Filter';
+    } else {
+        const label = (filterAliases[currentFilter] || currentFilter)
+            .replace('email address', 'Email')
+            .replace(/^([a-z])/i, (m) => m.toUpperCase());
+        btn.innerHTML = `<i class="fas fa-filter me-1"></i>Filter: ${label} <span class="badge bg-primary ms-1">✓</span>`;
+    }
+}
+
+function toggleIOCSelection(iocId, isSelected) {
+    if (isSelected) {
+        selectedIOCs.add(iocId);
+    } else {
+        selectedIOCs.delete(iocId);
+    }
+    updateBulkCommentButton();
+    updateSelectionCounts();
+}
+
+function updateBulkCommentButton() {
+    const btn = document.getElementById('bulkCommentBtn');
+    if (selectedIOCs.size > 0) {
+        btn.classList.remove('btn-outline-info');
+        btn.classList.add('btn-info');
+        btn.innerHTML = `<i class="fas fa-comments me-1"></i>Bulk Comment (${selectedIOCs.size})`;
+    } else {
+        btn.classList.remove('btn-info');
+        btn.classList.add('btn-outline-info');
+        btn.innerHTML = '<i class="fas fa-comments me-1"></i>Bulk Comment';
+    }
+}
+
+function updateSelectionCounts() {
+    const selectedCountType = document.getElementById('selectedCountType');
+    if (selectedCountType) {
+        selectedCountType.textContent = `${selectedIOCs.size} selected`;
+    }
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.ioc-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = true;
+        selectedIOCs.add(parseInt(cb.dataset.iocId));
+    });
+    updateBulkCommentButton();
+    updateSelectionCounts();
+}
+
+async function deleteIOC(iocId) {
+    if (!confirm('Delete this IOC?')) return;
+    try {
+        await fetch(`/api/incidents/${incidentId}/iocs/${iocId}`, { method: 'DELETE' });
+        allIOCs = allIOCs.filter(i => i.id !== iocId);
+        selectedIOCs.delete(iocId);
+        renderIOCs();
+        updateStats();
+        loadRelationships();
+        updateSelectionCounts();
+    } catch (error) {
+        console.error('Error deleting IOC:', error);
+    }
+}
+
+async function updateIOCType(iocId, newType) {
+    const normalized = (newType || '').toLowerCase();
+    if (!allowedTypes.includes(normalized)) {
+        alert('Invalid IOC type');
+        return;
+    }
+    try {
+        const response = await fetch(`/api/incidents/${incidentId}/iocs/${iocId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: normalized })
+        });
+        if (!response.ok) {
+            alert('Unable to update type');
+            return;
+        }
+        const data = await response.json();
+        const idx = allIOCs.findIndex(i => i.id === iocId);
+        if (idx !== -1) {
+            allIOCs[idx] = data.ioc;
+        }
+        renderIOCs();
+        updateStats();
+        loadRelationships();
+    } catch (error) {
+        console.error('Error updating IOC type:', error);
+    }
+}
+
+async function updateIOCNote(iocId, note) {
+    try {
+        await fetch(`/api/incidents/${incidentId}/iocs/${iocId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ analyst_note: note })
+        });
+    } catch (error) {
+        console.error('Error updating IOC note:', error);
+    }
+}
+
+function updateStats() {
+    document.getElementById('totalIocs').textContent = allIOCs.length;
+    document.getElementById('ioc-count').textContent = allIOCs.length;
+    
+    const typeCounts = {
+        'email address': 0,
+        'url': 0,
+        'domain': 0,
+        'ip': 0,
+        'hash': 0,
+        'username': 0
+    };
+    
+    allIOCs.forEach(ioc => {
+        const type = (ioc.type || '').toLowerCase();
+        if (type in typeCounts) {
+            typeCounts[type]++;
+        }
+    });
+    
+    Object.keys(typeCounts).forEach(key => {
+        const idKey = key.replace(/\s+/g, '-');
+        const el = document.getElementById(`count-${idKey}`);
+        if (el) el.textContent = typeCounts[key];
+    });
+}
+
+// Search
+const searchInput = document.getElementById('searchInput');
+if (searchInput) {
+    document.getElementById('searchInput').addEventListener('keyup', async (e) => {
+        const query = e.target.value.trim();
+        const resultsDiv = document.getElementById('searchResults');
+        
+        if (query.length < 2) {
+            resultsDiv.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-search fa-2x mb-2 d-block"></i>
+                    Start typing to search IOCs
+                </div>
+            `;
+            return;
+        }
+        
+        const matches = allIOCs.filter(ioc => 
+            ioc.value.toLowerCase().includes(query.toLowerCase()) ||
+            (ioc.analyst_note || '').toLowerCase().includes(query.toLowerCase())
+        );
+        
+        if (matches.length === 0) {
+            resultsDiv.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-search fa-2x mb-2 d-block"></i>
+                    No matches found
+                </div>
+            `;
+            return;
+        }
+        
+        resultsDiv.innerHTML = matches.map(ioc => `
+            <div class="ioc-item d-flex gap-3 align-items-start">
+                <div>
+                    <input type="checkbox" class="form-check-input search-ioc-checkbox" data-ioc-id="${ioc.id}" ${selectedIOCs.has(ioc.id) ? 'checked' : ''}>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="ioc-type-badge">${ioc.type}</span>
+                        <small class="text-muted">Added by ${ioc.added_by_name || 'unknown'}</small>
+                    </div>
+                    <div class="ioc-value mt-2">${escapeHtml(ioc.value)}</div>
+                    <div class="mt-2 d-flex align-items-center gap-2">
+                        <small class="text-muted">Type:</small>
+                        <select class="form-select form-select-sm" style="width: 180px;" onchange="updateIOCType(${ioc.id}, this.value)">
+                            ${allowedTypes.map(t => `<option value="${t}" ${t === (ioc.type || '').toLowerCase() ? 'selected' : ''}>${t.replace('email address','Email').replace(/^./, c => c.toUpperCase())}</option>`).join('')}
+                        </select>
+                    </div>
+                    <textarea class="form-control mt-2" rows="2" placeholder="Add analyst note..." onchange="updateIOCNote(${ioc.id}, this.value)">${ioc.analyst_note || ''}</textarea>
+                </div>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.search-ioc-checkbox').forEach(cb => {
+            cb.addEventListener('change', (ev) => {
+                const id = parseInt(ev.target.getAttribute('data-ioc-id'));
+                toggleIOCSelection(id, ev.target.checked);
+            });
+        });
+        const selectAllToggle = document.getElementById('searchSelectAll');
+        if (selectAllToggle) {
+            const total = document.querySelectorAll('.search-ioc-checkbox').length;
+            const checked = document.querySelectorAll('.search-ioc-checkbox:checked').length;
+            selectAllToggle.checked = total > 0 && checked === total;
+            selectAllToggle.indeterminate = checked > 0 && checked < total;
+        }
+        updateSelectionCounts();
+    });
+}
+
+// Relationships
+async function loadRelationships() {
+    try {
+        const response = await fetch(`/api/incidents/${incidentId}/relationships`);
+        const data = await response.json();
+        const relDiv = document.getElementById('relationshipsContent');
+        
+        const relData = data.relationships || [];
+        const relList = Array.isArray(relData) ? relData : Object.values(relData).flat();
+
+        if (!relList || relList.length === 0) {
+            relDiv.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-link fa-2x mb-2 d-block"></i>
+                    No relationships found yet
+                </div>
+            `;
+            return;
+        }
+        
+        relDiv.innerHTML = relList.map(rel => `
+            <div class="incident-link-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">${escapeHtml(rel.source_title || rel.source_name || 'Source')}</h6>
+                        <small class="text-muted">${escapeHtml(rel.match_type || 'Match')}</small>
+                    </div>
+                    <a href="${escapeHtml(rel.source_url || rel.link || '#')}" target="_blank" class="btn btn-sm btn-outline-primary">Open</a>
+                </div>
+                <div class="mt-2"><strong>IOC:</strong> ${escapeHtml(rel.ioc_value || '')}</div>
+                ${rel.tags ? `<small class="text-muted">Tags: ${escapeHtml(rel.tags)}</small>` : ''}
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading relationships:', error);
+    }
+}
+
+document.getElementById('relationships-tab').addEventListener('click', loadRelationships);
+
+// Switch tab programmatically
+function switchToTab(tabName) {
+    const tabTrigger = document.querySelector(`#${tabName}-tab`);
+    if (tabTrigger) {
+        const tab = new bootstrap.Tab(tabTrigger);
+        tab.show();
+    }
+}
+
+// ==================== ANNOUNCEMENTS ====================
+
+let announcements = [];
+
+async function loadAnnouncements() {
+    try {
+        const response = await fetch(`/api/incidents/${incidentId}/notes`);
+        const data = await response.json();
+        announcements = data.notes || [];
+        renderAnnouncements();
+    } catch (error) {
+        console.error('Error loading announcements:', error);
+    }
+}
+
+function renderAnnouncements() {
+    const container = document.getElementById('announcementsContainer');
+    const sidebarContainer = document.getElementById('sidebarAnnouncements');
+    
+    if (!container) return;
+    
+    if (announcements.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                No announcements yet
+            </div>
+        `;
+        if (sidebarContainer) {
+            sidebarContainer.innerHTML = `
+                <div class="text-center text-muted py-2">
+                    <small><i class="fas fa-inbox me-1"></i>No announcements</small>
+                </div>
+            `;
+        }
+        return;
+    }
+    
+    container.innerHTML = announcements.map(note => `
+        <div class="incident-note ${note.priority}">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h6 class="mb-1">${escapeHtml(note.title)}</h6>
+                    <small class="text-muted">
+                        <i class="fas fa-user me-1"></i>${escapeHtml(note.created_by)}
+                        <i class="fas fa-clock ms-3 me-1"></i>${new Date(note.created_at).toLocaleString()}
+                    </small>
+                </div>
+                ${note.priority !== 'normal' ? `<span class="badge bg-${note.priority === 'critical' ? 'danger' : note.priority === 'high' ? 'warning' : 'info'}">${note.priority.toUpperCase()}</span>` : ''}
+            </div>
+            <p class="mb-2">${escapeHtml(note.content)}</p>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement(${note.id})">
+                <i class="fas fa-trash me-1"></i>Delete
+            </button>
+        </div>
+    `).join('');
+
+    // Also render in sidebar (simplified version)
+    if (sidebarContainer) {
+        sidebarContainer.innerHTML = announcements.slice(0, 3).map(note => `
+            <div class="p-2 mb-2 border-bottom" style="border-color: #e9ecef !important;">
+                <div class="d-flex gap-2 align-items-start">
+                    <span class="badge bg-${note.priority === 'critical' ? 'danger' : note.priority === 'high' ? 'warning' : note.priority === 'low' ? 'success' : 'info'}" style="min-width: 40px; font-size: 0.65rem;">
+                        ${note.priority.charAt(0).toUpperCase()}
+                    </span>
+                    <div style="flex: 1; min-width: 0;">
+                        <small class="fw-bold d-block text-truncate">${escapeHtml(note.title)}</small>
+                        <small class="text-muted d-block">${escapeHtml(note.created_by)}</small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+const addAnnouncementBtn = document.getElementById('addAnnouncementBtn');
+if (addAnnouncementBtn) {
+    addAnnouncementBtn.addEventListener('click', async () => {
+        const title = document.getElementById('announcementTitle').value.trim();
+        const content = document.getElementById('announcementContent').value.trim();
+        const priority = document.getElementById('announcementPriority').value;
+        
+        if (!title || !content) {
+            alert('Title and message required');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/incidents/${incidentId}/notes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, content, priority })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                announcements.push(data.note);
+                document.getElementById('announcementTitle').value = '';
+                document.getElementById('announcementContent').value = '';
+                document.getElementById('announcementPriority').value = 'normal';
+                renderAnnouncements();
+            }
+        } catch (error) {
+            console.error('Error adding announcement:', error);
+        }
+    });
+}
+
+async function deleteAnnouncement(noteId) {
+    if (!confirm('Delete this announcement?')) return;
+    
+    try {
+        await fetch(`/api/incidents/${incidentId}/notes/${noteId}`, { method: 'DELETE' });
+        announcements = announcements.filter(n => n.id !== noteId);
+        renderAnnouncements();
+    } catch (error) {
+        console.error('Error deleting announcement:', error);
+    }
+}
+
+// ==================== QUICK LINKS ====================
+
+let quickLinks = [];
+
+async function loadQuickLinks() {
+    try {
+        const response = await fetch(`/api/incidents/${incidentId}/links`);
+        const data = await response.json();
+        quickLinks = data.links || [];
+        renderQuickLinks();
+    } catch (error) {
+        console.error('Error loading links:', error);
+    }
+}
+
+function renderQuickLinks() {
+    const container = document.getElementById('linksContainer');
+    const sidebarContainer = document.getElementById('sidebarQuickLinks');
+    
+    if (!container) return;
+    
+    if (quickLinks.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-link fa-2x mb-2 d-block"></i>
+                No links added yet
+            </div>
+        `;
+        if (sidebarContainer) {
+            sidebarContainer.innerHTML = `
+                <div class="text-center text-muted py-2">
+                    <small><i class="fas fa-link me-1"></i>No links</small>
+                </div>
+            `;
+        }
+        return;
+    }
+    
+    container.innerHTML = quickLinks.map(link => `
+        <div class="incident-link-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h6 class="mb-2">${escapeHtml(link.title)}</h6>
+                    <a href="${escapeHtml(link.url)}" target="_blank" class="text-decoration-none">
+                        <span class="link-type-badge">${link.link_type}</span>
+                        <small class="text-muted">${escapeHtml(link.url)}</small>
+                    </a>
+                    <br>
+                    <small class="text-muted mt-2 d-block">
+                        <i class="fas fa-user me-1"></i>${escapeHtml(link.created_by)}
+                    </small>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteLink(${link.id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    // Also render in sidebar (simplified version)
+    if (sidebarContainer) {
+        sidebarContainer.innerHTML = quickLinks.slice(0, 3).map(link => `
+            <div class="p-2 mb-2 border-bottom" style="border-color: #e9ecef !important;">
+                <a href="${escapeHtml(link.url)}" target="_blank" class="text-decoration-none">
+                    <small class="fw-bold d-block text-truncate">${escapeHtml(link.title)}</small>
+                    <span class="link-type-badge">${link.link_type}</span>
+                </a>
+            </div>
+        `).join('');
+    }
+}
+
+const addLinkBtn = document.getElementById('addLinkBtn');
+if (addLinkBtn) {
+    addLinkBtn.addEventListener('click', async () => {
+        const title = document.getElementById('linkTitle').value.trim();
+        let url = document.getElementById('linkUrl').value.trim();
+        const linkType = document.getElementById('linkType').value;
+        
+        if (!title || !url) {
+            alert('Title and URL required');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/incidents/${incidentId}/links`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, url, link_type: linkType })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                quickLinks.push(data.link);
+                document.getElementById('linkTitle').value = '';
+                document.getElementById('linkUrl').value = '';
+                document.getElementById('linkType').value = 'reference';
+                renderQuickLinks();
+            }
+        } catch (error) {
+            console.error('Error adding link:', error);
+        }
+    });
+}
+
+async function deleteLink(linkId) {
+    if (!confirm('Delete this link?')) return;
+    
+    try {
+        await fetch(`/api/incidents/${incidentId}/links/${linkId}`, { method: 'DELETE' });
+        quickLinks = quickLinks.filter(l => l.id !== linkId);
+        renderQuickLinks();
+    } catch (error) {
+        console.error('Error deleting link:', error);
+    }
+}
+
+// Delete incident button
+const deleteBtn = document.getElementById('deleteIncidentBtn');
+if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to delete this incident? This action cannot be undone.')) return;
+        
+        try {
+            const response = await fetch(`/api/incidents/${incidentId}`, { method: 'DELETE' });
+            if (response.ok) {
+                alert('Incident deleted');
+                window.location.href = '{{ url_for("incidents_list") }}';
+            } else {
+                alert('Error deleting incident');
+            }
+        } catch (error) {
+            console.error('Error deleting incident:', error);
+            alert('Error deleting incident');
+        }
+    });
+}
+
+// Copy invite link
+document.getElementById('copyBtn').addEventListener('click', () => {
+    const input = document.getElementById('inviteUrl');
+    input.select();
+    document.execCommand('copy');
+    alert('Invite link copied!');
+});
+
+// Refresh button
+document.getElementById('refreshBtn').addEventListener('click', loadIOCs);
+
+// ==================== BULK COMMENT ====================
+
+document.getElementById('bulkCommentBtn').addEventListener('click', () => {
+    if (selectedIOCs.size === 0) {
+        alert('Please select at least one IOC first');
+        return;
+    }
+    
+    document.getElementById('selectedCount').textContent = selectedIOCs.size;
+    document.getElementById('bulkCommentText').value = '';
+    document.getElementById('replaceBulkComment').checked = false;
+    
+    const modal = new bootstrap.Modal(document.getElementById('bulkCommentModal'));
+    modal.show();
+});
+
+document.getElementById('applyBulkCommentBtn').addEventListener('click', async () => {
+    const commentText = document.getElementById('bulkCommentText').value.trim();
+    const replace = document.getElementById('replaceBulkComment').checked;
+    
+    if (!commentText) {
+        alert('Please enter a comment');
+        return;
+    }
+    
+    const btn = document.getElementById('applyBulkCommentBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Applying...';
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const iocId of selectedIOCs) {
+        const ioc = allIOCs.find(i => i.id === iocId);
+        if (!ioc) continue;
+        
+        try {
+            let newNote = commentText;
+            if (!replace && ioc.analyst_note) {
+                newNote = ioc.analyst_note + '\n---\n' + commentText;
+            }
+            
+            await updateIOCNote(iocId, newNote);
+            ioc.analyst_note = newNote;
+            successCount++;
+        } catch (error) {
+            console.error('Error updating IOC:', error);
+            errorCount++;
+        }
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i>Apply to Selected';
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('bulkCommentModal'));
+    modal.hide();
+    
+    // Re-render IOCs to show updated notes
+    renderIOCs();
+    selectedIOCs.clear();
+    updateBulkCommentButton();
+    
+    alert(`Applied to ${successCount} IOC(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+});
+
+// ==================== BULK TYPE ====================
+
+const bulkTypeBtn = document.getElementById('bulkTypeBtn');
+if (bulkTypeBtn) {
+    bulkTypeBtn.addEventListener('click', () => {
+        if (selectedIOCs.size === 0) {
+            alert('Please select at least one IOC first');
+            return;
+        }
+        const selectedCountType = document.getElementById('selectedCountType');
+        if (selectedCountType) {
+            selectedCountType.textContent = `${selectedIOCs.size} selected`;
+        }
+        const modal = new bootstrap.Modal(document.getElementById('bulkTypeModal'));
+        modal.show();
+    });
+}
+
+document.getElementById('applyBulkTypeBtn').addEventListener('click', async () => {
+    const newType = document.getElementById('bulkTypeSelect').value;
+    if (!allowedTypes.includes(newType)) {
+        alert('Select a valid type');
+        return;
+    }
+
+    const btn = document.getElementById('applyBulkTypeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Updating...';
+
+    let successCount = 0;
+    let errorCount = 0;
+    for (const iocId of selectedIOCs) {
+        try {
+            await updateIOCType(iocId, newType);
+            successCount++;
+        } catch (error) {
+            console.error('Bulk type update error:', error);
+            errorCount++;
+        }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i>Apply to Selected';
+    const modal = bootstrap.Modal.getInstance(document.getElementById('bulkTypeModal'));
+    modal.hide();
+    alert(`Updated ${successCount} IOC(s)${errorCount ? `, ${errorCount} failed` : ''}`);
+});
+
+// Escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up event listeners
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', selectAll);
+    }
+    const selectedCountType = document.getElementById('selectedCountType');
+    if (selectedCountType) {
+        selectedCountType.textContent = `${selectedIOCs.size} selected`;
+    }
+
+    const searchSelectAll = document.getElementById('searchSelectAll');
+    const searchBulkComment = document.getElementById('searchBulkComment');
+    const searchBulkType = document.getElementById('searchBulkType');
+
+    if (searchSelectAll) {
+        searchSelectAll.addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            document.querySelectorAll('.search-ioc-checkbox').forEach(cb => {
+                cb.checked = checked;
+                const id = parseInt(cb.dataset.iocId);
+                toggleIOCSelection(id, checked);
+            });
+            updateSelectionCounts();
+        });
+    }
+
+    if (searchBulkComment) {
+        searchBulkComment.addEventListener('click', () => {
+            document.getElementById('bulkCommentBtn')?.click();
+        });
+    }
+    if (searchBulkType) {
+        searchBulkType.addEventListener('click', () => {
+            document.getElementById('bulkTypeBtn')?.click();
+        });
+    }
+    
+    // Load initial data
+    loadIOCs();
+    loadAnnouncements();
+    loadQuickLinks();
+    
+    // Set up tab click 
+    const announcementsTab = document.getElementById('announcements-tab');
+    if (announcementsTab && !announcementsTab.hasListener) {
+        announcementsTab.addEventListener('click', () => {
+            loadAnnouncements();
+        });
+        announcementsTab.hasListener = true;
+    }
+    
+    const linksTab = document.getElementById('links-tab');
+    if (linksTab && !linksTab.hasListener) {
+        linksTab.addEventListener('click', () => {
+            loadQuickLinks();
+        });
+        linksTab.hasListener = true;
+    }
+    
+    const searchTab = document.getElementById('search-tab');
+    if (searchTab && !searchTab.hasListener) {
+        searchTab.addEventListener('click', () => {
+            // Search tab ready
+        });
+        searchTab.hasListener = true;
+    }
+    
+    const relationshipsTab = document.getElementById('relationships-tab');
+    if (relationshipsTab && !relationshipsTab.hasListener) {
+        relationshipsTab.addEventListener('click', loadRelationships);
+        relationshipsTab.hasListener = true;
+    }
+});
+</script>
+{% endblock %}

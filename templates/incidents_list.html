@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            Incident Response
+        </h1>
+        <a href="{{ url_for('create_incident') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>New Incident
+        </a>
+    </div>
+
+    <!-- Status Tabs -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link {% if status == 'active' %}active{% endif %}" href="{{ url_for('incidents_list', status='active') }}">
+                <i class="fas fa-circle-notch fa-spin me-1"></i>Active
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if status == 'completed' %}active{% endif %}" href="{{ url_for('incidents_list', status='completed') }}">
+                <i class="fas fa-check-circle me-1"></i>Completed
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if status == 'all' %}active{% endif %}" href="{{ url_for('incidents_list', status='all') }}">
+                <i class="fas fa-list me-1"></i>All
+            </a>
+        </li>
+    </ul>
+
+    {% if incidents.items %}
+    <div class="row">
+        {% for incident in incidents.items %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card h-100 border-left-primary" style="border-left-width: 4px; border-left-color: 
+                {% if incident.severity == 'critical' %}#dc3545
+                {% elif incident.severity == 'high' %}#fd7e14
+                {% elif incident.severity == 'medium' %}#ffc107
+                {% else %}#28a745
+                {% endif %};">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="card-title mb-1">{{ incident.title }}</h5>
+                            <small class="text-muted">
+                                <i class="fas fa-user-circle me-1"></i>{{ incident.owner.username if incident.owner else 'Unknown' }}
+                            </small>
+                        </div>
+                        <span class="badge bg-{% if incident.status == 'active' %}danger{% elif incident.status == 'completed' %}success{% else %}secondary{% endif %}">
+                            {{ incident.status.capitalize() }}
+                        </span>
+                    </div>
+                    
+                    {% if incident.description %}
+                    <p class="card-text text-muted small">{{ incident.description[:100] }}{% if incident.description|length > 100 %}...{% endif %}</p>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        {% if incident.category %}
+                        <span class="badge bg-secondary me-2">{{ incident.category }}</span>
+                        {% endif %}
+                        <span class="badge bg-warning">{{ incident.severity.capitalize() }}</span>
+                    </div>
+                    
+                    <div class="small text-muted mb-3">
+                        <i class="fas fa-box me-1"></i>{{ incident.incident_iocs|length }} IOCs
+                        <span class="ms-2"><i class="fas fa-users me-1"></i>{{ incident.participants|length }} Participants</span>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('incident_canvas', incident_id=incident.id) }}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-arrow-right me-1"></i>Open Canvas
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light small">
+                    <i class="fas fa-clock me-1"></i>{{ format_dt(incident.updated_at) }}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if incidents.pages > 1 %}
+    <nav>
+        <ul class="pagination justify-content-center mt-4">
+            {% if incidents.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('incidents_list', status=status, page=incidents.prev_num) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page_num in incidents.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == incidents.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('incidents_list', status=status, page=page_num) }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            
+            {% if incidents.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('incidents_list', status=status, page=incidents.next_num) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+    
+    {% else %}
+    <div class="alert alert-info text-center py-5">
+        <h4><i class="fas fa-inbox me-2"></i>No Incidents</h4>
+        <p class="mb-0">No {% if status != 'all' %}{{ status }}{% endif %} incidents yet. <a href="{{ url_for('create_incident') }}">Create one now</a></p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Create New Event Rule</h1>
+                <a href="{{ url_for('event_rules') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Rules
+                </a>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-plus me-2"></i>Rule Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="needs-validation" novalidate>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">Rule Name *</label>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                    <div class="invalid-feedback">Rule name is required.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rule_type" class="form-label">Rule Type *</label>
+                                    <select class="form-select" id="rule_type" name="rule_type" required onchange="showRuleFields()">
+                                        <option value="">Select rule type...</option>
+                                        <option value="ioc_frequency">IOC Frequency</option>
+                                        <option value="about_to_expire">About to Expire Sources</option>
+                                        <option value="ioc_monitor">IOC Monitor</option>
+                                        <option value="incident_monitor">Incident Monitor</option>
+                                    </select>
+                                    <div class="invalid-feedback">Rule type is required.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" placeholder="Brief description of what this rule does..."></textarea>
+                        </div>
+                        <!-- IOC Frequency Fields -->
+                        <div id="ioc_frequency_fields" style="display: none;">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">IOC Frequency Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="ioc_type" class="form-label">IOC Type</label>
+                                                <select class="form-select" id="ioc_type" name="ioc_type" required>
+                                                    <option value="">Select IOC type...</option>
+                                                    <option value="ip">IP Address</option>
+                                                    <option value="domain">Domain</option>
+                                                    <option value="url">URL</option>
+                                                    <option value="hash">Hash</option>
+                                                    <option value="email address">Email Address</option>
+                                                    <option value="username">Username</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="min_count" class="form-label">Minimum Count</label>
+                                                <input type="number" class="form-control" id="min_count" name="min_count" min="1" value="2" required>
+                                                <div class="form-text">Minimum number of occurrences to trigger</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="time_window_hours" class="form-label">Time Window (hours)</label>
+                                                <input type="number" class="form-control" id="time_window_hours" name="time_window_hours" min="1" value="24" required>
+                                                <div class="form-text">Time window to check for occurrences</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- About to Expire Fields -->
+                        <div id="about_to_expire_fields" style="display: none;">
+                            <div class="mb-3">
+                                <label for="days_before_expiry" class="form-label">Days Before Expiry</label>
+                                <input type="number" class="form-control" id="days_before_expiry" name="days_before_expiry" min="1" value="7" required>
+                                <div class="form-text">Trigger event for notes expiring within this many days of retention period.</div>
+                            </div>
+                        </div>
+                        <!-- IOC Monitor Fields -->
+                        <div id="ioc_monitor_fields" style="display: none;">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">IOC Monitor Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="ioc_type_monitor" class="form-label">IOC Type</label>
+                                                <select class="form-select" id="ioc_type_monitor" name="ioc_type" required>
+                                                    <option value="">Select IOC type...</option>
+                                                    <option value="ip">IP Address</option>
+                                                    <option value="domain">Domain</option>
+                                                    <option value="url">URL</option>
+                                                    <option value="hash">Hash</option>
+                                                    <option value="email address">Email Address</option>
+                                                    <option value="username">Username</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="ioc_value_monitor" class="form-label">IOC Value</label>
+                                                <input type="text" class="form-control" id="ioc_value_monitor" name="ioc_value" placeholder="Enter IOC value to monitor" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Incident Monitor Fields -->
+                        <div id="incident_monitor_fields" style="display: none;">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Incident Monitor Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="incident_id" class="form-label">Incident ID *</label>
+                                        <input type="number" class="form-control" id="incident_id" name="incident_id" placeholder="Enter incident ID to monitor" required>
+                                        <div class="form-text">Will trigger events when new sources are related to IOCs from this incident.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Create Rule
+                            </button>
+                            <a href="{{ url_for('event_rules') }}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function setGroupState(groupId, show, requiredNames) {
+    const groupEl = document.getElementById(groupId);
+    if (!groupEl) return;
+    groupEl.style.display = show ? 'block' : 'none';
+    requiredNames.forEach((name) => {
+        const field = groupEl.querySelector(`[name="${name}"]`);
+        if (field) {
+            field.required = show;
+            field.disabled = !show;
+        }
+    });
+}
+
+function showRuleFields() {
+    const ruleType = document.getElementById('rule_type').value;
+    setGroupState('ioc_frequency_fields', ruleType === 'ioc_frequency', ['ioc_type', 'min_count', 'time_window_hours']);
+    setGroupState('about_to_expire_fields', ruleType === 'about_to_expire', ['days_before_expiry']);
+    setGroupState('ioc_monitor_fields', ruleType === 'ioc_monitor', ['ioc_type', 'ioc_value']);
+    setGroupState('incident_monitor_fields', ruleType === 'incident_monitor', ['incident_id']);
+}
+
+document.addEventListener('DOMContentLoaded', showRuleFields);
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %} 
