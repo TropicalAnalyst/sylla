@@ -15,6 +15,7 @@ import requests
 from functools import wraps
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy import or_, Text, func, distinct, text, inspect
+from sqlalchemy.exc import IntegrityError
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
 from wtforms import SubmitField, PasswordField, StringField, TextAreaField, SelectField, BooleanField
@@ -317,6 +318,28 @@ class AppConfig(db.Model):
     value = db.Column(db.Text, nullable=True)
 
 
+class APIKey(db.Model):
+    """Stores API keys that can be used to interact with the public endpoints.
+    Admins generate keys via the admin interface and can revoke them later.
+
+    Fields:
+        id           - primary key
+        key          - actual token string (stored in plaintext for simplicity)
+        description  - optional human-readable description
+        created_by   - user id of the admin who generated the key
+        created_at   - timestamp for auditing
+        is_active    - whether the key is still valid
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(200))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
+    creator = db.relationship('User')
+
+
 def get_config_value(key, default=None):
     config_entry = AppConfig.query.filter_by(key=key).first()
     return config_entry.value if config_entry else default
@@ -568,9 +591,11 @@ def welcome():
     total_users = User.query.count()
     
     # Calculate total relationships (notes that share IOCs)
+    # only count IOC values that appear in more than one distinct note; duplicates
+    # within the same note should not contribute.
     total_relationships = db.session.query(
         func.count(distinct(IOC.value))
-    ).join(Note).group_by(IOC.value).having(func.count(Note.id) > 1).count()
+    ).join(Note).group_by(IOC.value).having(func.count(distinct(Note.id)) > 1).count()
 
     stats = {
         'total_sources': total_sources,
@@ -602,9 +627,9 @@ def welcome():
         IOC.value,
         func.min(Note.id).label('note_id_1'),
         func.max(Note.id).label('note_id_2'),
-        func.count(Note.id).label('link_count'),
+        func.count(distinct(Note.id)).label('link_count'),
         func.max(Note.created_at).label('last_linked_at')
-    ).join(Note).group_by(IOC.value).having(func.count(Note.id) > 1).subquery()
+    ).join(Note).group_by(IOC.value).having(func.count(distinct(Note.id)) > 1).subquery()
 
     recent_relationships_query = db.session.query(
         subquery.c.note_id_1,
@@ -1204,6 +1229,39 @@ def admin_settings():
                          rule_scheduler_enabled=rule_scheduler_enabled,
                          rule_scheduler_interval=rule_scheduler_interval)
 
+
+# --- API Key Management ---------------------------------------------------
+@app.route('/admin/api_keys', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def manage_api_keys():
+    """Allow admins to view existing API keys and generate new ones."""
+    if request.method == 'POST':
+        description = request.form.get('description', '').strip()
+        token = secrets.token_urlsafe(32)
+        key = APIKey(key=token, description=description, created_by=current_user.id)
+        db.session.add(key)
+        db.session.commit()
+        record_audit('create_api_key', f'Generated new API key (id={key.id})')
+        flash(f'New API key created: {token}', 'success')
+        # show token once only
+        return redirect(url_for('manage_api_keys'))
+
+    keys = APIKey.query.order_by(APIKey.created_at.desc()).all()
+    return render_template('admin/api_keys.html', keys=keys)
+
+@app.route('/admin/api_keys/<int:key_id>/revoke', methods=['POST'])
+@login_required
+@admin_required
+def revoke_api_key(key_id):
+    key = APIKey.query.get_or_404(key_id)
+    key.is_active = False
+    db.session.commit()
+    record_audit('revoke_api_key', f'Revoked API key (id={key.id})')
+    flash('API key revoked.', 'success')
+    return redirect(url_for('manage_api_keys'))
+
+
 @app.route('/admin/users/new', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -1470,8 +1528,11 @@ def note_relations(note_id):
     if not iocs:
         return jsonify({})
     
-    # For each IOC, find other notes (excluding the given note) that share it
+    # For each IOC, find other notes (excluding the given note) that share it.
+    # We also track notes we've already added so a single related source
+    # only appears once even if multiple IOCs match.
     ioc_relations = {}
+    seen_note_ids = set()
     for ioc in sorted(iocs):  # Sort IOCs for consistent ordering
         related_notes = set()
         # Find notes that share this IOC (excluding the current note)
@@ -1482,23 +1543,31 @@ def note_relations(note_id):
             .all()
         )
         
-        if related_notes:
-            # Convert to list and sort for consistent ordering
-            related_notes_list = sorted(related_notes, key=lambda x: (x.created_at, x.id))
-            too_many = len(related_notes_list) > 10
-            
-            ioc_relations[ioc] = {
-                'notes': [
-                    {
-                        'id': n.id, 
-                        'title': n.title, 
-                        'created_at': n.created_at.strftime('%Y-%m-%d'),
-                        'category': n.category
-                    } for n in related_notes_list[:10]
-                ],
-                'too_many': too_many,
-                'total_count': len(related_notes_list)
-            }
+        # remove any notes we've already reported under previous IOC keys
+        related_notes = [n for n in related_notes if n.id not in seen_note_ids]
+        if not related_notes:
+            continue
+
+        # Convert to list and sort for consistent ordering
+        related_notes_list = sorted(related_notes, key=lambda x: (x.created_at, x.id))
+        too_many = len(related_notes_list) > 10
+        
+        # remember ids so we don't duplicate later
+        for n in related_notes_list:
+            seen_note_ids.add(n.id)
+
+        ioc_relations[ioc] = {
+            'notes': [
+                {
+                    'id': n.id, 
+                    'title': n.title, 
+                    'created_at': n.created_at.strftime('%Y-%m-%d'),
+                    'category': n.category
+                } for n in related_notes_list[:10]
+            ],
+            'too_many': too_many,
+            'total_count': len(related_notes_list)
+        }
     
     return jsonify(ioc_relations)
 
@@ -2000,18 +2069,154 @@ def resolve_event(event_id):
     flash('Event resolved successfully!', 'success')
     return redirect(url_for('view_event', event_id=event_id))
 
+
+# ----- API key utilities ----------------------------------------------------
+
+def require_api_key(f):
+    """Decorator to protect endpoints with an API key passed via header or query parameter."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # support both header and query param for flexibility
+        api_key_value = request.headers.get('X-API-Key') or request.args.get('api_key')
+        if not api_key_value:
+            return jsonify({'error': 'API key required'}), 401
+        key_obj = APIKey.query.filter_by(key=api_key_value, is_active=True).first()
+        if not key_obj:
+            return jsonify({'error': 'Invalid API key'}), 403
+        # store for downstream use
+        from flask import g
+        g.api_key = key_obj
+        return f(*args, **kwargs)
+    return decorated
+
+# public endpoints for notes (sources)
+@app.route('/api/notes', methods=['GET', 'POST'])
+@require_api_key
+def api_notes():
+    """List or create sources via API.
+
+    GET  - return a short listing of recent sources (max 100)
+    POST - create a new source along with optional IOCs
+    """
+    from flask import g
+    if request.method == 'GET':
+        notes = Note.query.order_by(Note.created_at.desc()).limit(100).all()
+        result = []
+        for note in notes:
+            result.append({
+                'id': note.id,
+                'title': note.title,
+                'category': note.category,
+                'created_at': note.created_at.isoformat(),
+                'custom_identifier': note.custom_identifier
+            })
+        return jsonify(result)
+
+    # POST creates a new source
+    # parse JSON payload safely
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({'error': 'Invalid JSON payload'}), 400
+
+    title = (data.get('title') or '').strip()
+    content = (data.get('content') or '').strip()
+    category = (data.get('category') or '').strip()
+    keep = bool(data.get('keep', False))
+    iocs = data.get('iocs', [])
+
+    if not title or not category:
+        return jsonify({'error': 'title and category are required'}), 400
+    if len(title.split()) > 300:
+        return jsonify({'error': 'title exceeds word limit (300)'}), 400
+    if content and len(content.split()) > 10000:
+        return jsonify({'error': 'content exceeds word limit (10000)'}), 400
+
+    # determine owner of the note: prefer the admin who created the key
+    owner_id = g.api_key.created_by
+    if owner_id:
+        owner = User.query.get(owner_id)
+        if not owner:
+            owner_id = None
+    if not owner_id:
+        sylla = User.query.filter_by(username='sylla').first()
+        owner_id = sylla.id if sylla else None
+    if not owner_id:
+        # impossible, but avoid crashing
+        return jsonify({'error': 'No valid owner could be determined for the new note'}), 500
+
+    # perform DB work inside a try block so we can catch flush errors as well
+    try:
+        new_note = Note(
+            title=title,
+            content=content,
+            category=category,
+            user_id=owner_id,
+            keep=keep
+        )
+        db.session.add(new_note)
+        db.session.flush()  # may raise IntegrityError
+
+        # process IOCs list
+        if isinstance(iocs, list):
+            for entry in iocs:
+                if not isinstance(entry, dict):
+                    continue
+                ioc_type = entry.get('type')
+                ioc_value = (entry.get('value') or '').strip()
+                ioc_tags = (entry.get('tags') or '').strip()
+                if ioc_value and IOC.is_valid_type(ioc_type):
+                    db.session.add(IOC(
+                        type=ioc_type,
+                        value=ioc_value,
+                        tags=ioc_tags,
+                        note_id=new_note.id
+                    ))
+        db.session.commit()
+        record_audit('api_create_source', f'API key {g.api_key.id} created source "{title}"')
+        return jsonify({'message': 'Source created', 'note_id': new_note.id}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Unique constraint failed (custom identifier?)'}), 400
+    except Exception as e:
+        db.session.rollback()
+        # log the exception so admin can inspect server logs
+        app.logger.exception('Error creating note via API')
+        return jsonify({'error': 'internal error'}), 500
+
+@app.route('/api/notes/<int:note_id>', methods=['GET', 'DELETE'])
+@require_api_key
+def api_note_detail(note_id):
+    """Retrieve or delete a single source via API."""
+    note = Note.query.get_or_404(note_id)
+    if request.method == 'GET':
+        return jsonify({
+            'id': note.id,
+            'title': note.title,
+            'content': note.content,
+            'category': note.category,
+            'keep': note.keep,
+            'created_at': note.created_at.isoformat(),
+            'iocs': [ioc.to_dict() for ioc in note.iocs]
+        })
+    else:
+        db.session.delete(note)
+        db.session.commit()
+        return jsonify({'message': 'Deleted'}), 200
+
 @app.route('/api/events/<int:event_id>/resolve', methods=['POST'])
 @login_required
+
 def api_resolve_event(event_id):
     """API endpoint to resolve an event"""
     if not current_user.has_permission('can_edit') and current_user.role.name not in ['Admin', 'Editor']:
         return jsonify({'error': 'Access denied'}), 403
-    
+
     event = Event.query.get_or_404(event_id)
     event.status = 'resolved'
     event.resolved_at = datetime.utcnow()
     event.resolved_by = current_user.id
-    
+
     db.session.commit()
     return jsonify({'success': True, 'message': 'Event resolved'})
 

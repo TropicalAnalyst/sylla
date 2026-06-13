@@ -117,7 +117,8 @@
                             {% endif %}
                             {% if iocs.pages > 1 %}
                                 <nav aria-label="IOC pagination">
-                                    <ul class="pagination mt-3 justify-content-center">
+                                    <div class="overflow-auto">
+                                    <ul class="pagination mt-3 justify-content-center flex-wrap">
                                         {% if iocs.has_prev %}
                                             <li class="page-item"><a class="page-link" href="{{ url_for('view_note', note_id=note.id, page=iocs.prev_num) }}#iocs" onclick="setActiveTab('iocs')">Previous</a></li>
                                         {% endif %}
@@ -128,6 +129,7 @@
                                             <li class="page-item"><a class="page-link" href="{{ url_for('view_note', note_id=note.id, page=iocs.next_num) }}#iocs" onclick="setActiveTab('iocs')">Next</a></li>
                                         {% endif %}
                                     </ul>
+                                    </div>
                                 </nav>
                             {% endif %}
                         </div>
